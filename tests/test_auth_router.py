@@ -16,6 +16,7 @@ from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
 from app.modules.defects.models import DefectCode
+from app.modules.downtime.models import DowntimeReason
 from app.modules.employees.models import Employee
 from app.modules.products.models import Product
 
@@ -89,6 +90,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert client.get("/admin/machines").status_code == 403
             assert client.get("/admin/employees").status_code == 403
             assert client.get("/admin/defect-codes").status_code == 403
+            assert client.get("/admin/downtime-reasons").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -362,6 +364,17 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                 db.query(AuditLog).filter_by(table_name="defect_codes", record_id=defect.id).one()
             )
             assert defect_audit.new_values["detected_at"] == "SX"
+
+            downtime_page = client.get("/admin/downtime-reasons")
+            assert downtime_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', downtime_page.text).group(1)
+            reason_code = f"CUSTOM-{asset_key}"
+            created_reason = client.post(
+                "/admin/downtime-reasons",
+                data={"csrf_token": csrf, "code": reason_code, "name": "Chờ vật tư phụ"},
+            )
+            assert created_reason.status_code == 303
+            assert db.query(DowntimeReason).filter_by(code=reason_code).one().is_active
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

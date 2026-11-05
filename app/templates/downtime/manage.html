@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
+    <h1 id="page-title">Lý do dừng máy</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+    <p class="helper-text">Danh mục có sẵn: Hỏng máy, Đổi mã, Chờ phôi, Chờ kỹ thuật và Chờ người vận hành.</p>
+
+    <section class="subsection" aria-labelledby="create-title">
+      <h2 id="create-title">Thêm lý do dừng máy</h2>
+      <form method="post" action="/admin/downtime-reasons" class="inline-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Mã lý do<input name="code" maxlength="50" required autofocus value="{{ submitted.get('code', '') }}" aria-describedby="code-error"></label>
+        {% if errors.get('code') %}<p id="code-error" class="field-error">{{ errors.get('code') }}</p>{% endif %}
+        <label>Tên lý do<input name="name" maxlength="120" required value="{{ submitted.get('name', '') }}" aria-describedby="name-error"></label>
+        {% if errors.get('name') %}<p id="name-error" class="field-error">{{ errors.get('name') }}</p>{% endif %}
+        <button class="primary-button" type="submit">Thêm lý do</button>
+      </form>
+    </section>
+
+    <section class="subsection" aria-labelledby="list-title">
+      <h2 id="list-title">Danh sách lý do</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã</th><th>Tên lý do</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for item in reasons %}
+              <tr>
+                <td>{{ item.code }}</td><td>{{ item.name }}</td>
+                <td>{% if item.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+                <td><details><summary>Sửa</summary>
+                  <form method="post" action="/admin/downtime-reasons/{{ item.id }}" class="form-stack compact-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="version" value="{{ item.version }}">
+                    <label>Mã lý do<input name="code" maxlength="50" required value="{{ item.code }}"></label>
+                    <label>Tên lý do<input name="name" maxlength="120" required value="{{ item.name }}"></label>
+                    <label class="checkbox-line"><input type="checkbox" name="is_active" value="true" {% if item.is_active %}checked{% endif %}> Đang sử dụng</label>
+                    <button class="secondary-button" type="submit">Lưu thay đổi</button>
+                  </form>
+                </details></td>
+              </tr>
+            {% else %}<tr><td colspan="4">Chưa có lý do dừng máy.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="helper-text">Lý do ngừng dùng vẫn được giữ cho các báo cáo cũ và ẩn khỏi danh sách chọn mới.</p>
+    </section>
+  </section>
+{% endblock %}

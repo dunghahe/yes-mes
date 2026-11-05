@@ -13,6 +13,7 @@ from app.modules.auth.dependencies import SESSION_COOKIE_NAME, require_active_us
 from app.modules.auth.models import User
 from app.modules.auth.router import router as auth_router
 from app.modules.defects.router import router as defects_router
+from app.modules.downtime.router import router as downtime_router
 from app.modules.employees.router import router as employees_router
 from app.modules.health.router import router as health_router
 from app.modules.products.router import router as products_router
@@ -34,6 +35,7 @@ app.include_router(auth_router)
 app.include_router(assets_router)
 app.include_router(employees_router)
 app.include_router(defects_router)
+app.include_router(downtime_router)
 app.include_router(users_router)
 app.include_router(products_router)
 

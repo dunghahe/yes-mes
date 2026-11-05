@@ -8,6 +8,7 @@ from app.core.db import Base
 from app.modules.assets import models as asset_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.defects import models as defect_models  # noqa: F401
+from app.modules.downtime import models as downtime_models  # noqa: F401
 from app.modules.employees import models as employee_models  # noqa: F401
 from app.modules.products import models as product_models  # noqa: F401
 from app.modules.users import models as user_models  # noqa: F401
