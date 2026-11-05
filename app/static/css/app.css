@@ -210,11 +210,43 @@ h1 {
 .schedule-card { display: grid; gap: 4px; margin: 5px 0; padding: 8px; border-left: 3px solid #13856e; border-radius: 5px; background: #edf7f3; font-size: 0.85rem; }
 .day-schedule, .today-schedule-list { display: grid; gap: 8px; }
 .today-schedule { margin: 24px 0; padding: 16px; border: 1px solid #d8e1e4; border-radius: 12px; }
+.queue-badge { display: inline-grid; min-width: 32px; min-height: 32px; place-items: center; padding: 2px 8px; border-radius: 999px; background: #176b67; color: #fff; font-size: 0.85em; vertical-align: middle; }
+.warehouse-panel .table-wrap { margin-top: 16px; }
+.warehouse-panel td small { display: block; margin-top: 4px; color: #52656d; }
+
+.print-page { min-width: 0; min-height: 100vh; background: #e8edef; color: #18262c; }
+.print-actions { display: flex; justify-content: center; gap: 12px; padding: 16px; }
+.print-sheet { width: min(100% - 32px, 210mm); min-height: 297mm; margin: 0 auto 24px; padding: 13mm; background: #fff; box-shadow: 0 8px 28px rgb(22 45 60 / 12%); }
+.print-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 2px solid #17252f; padding-bottom: 12px; }
+.print-header h1 { margin: 6px 0; font-size: 1.5rem; }
+.print-request-number { margin: 0; font-size: 1.15rem; font-weight: 750; }
+.request-qr { width: 28mm; height: 28mm; object-fit: contain; }
+.print-section { margin-top: 14px; break-inside: avoid; }
+.print-section h2 { margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid #7d8e95; font-size: 1rem; }
+.print-section h3 { margin: 8px 0 4px; font-size: 0.9rem; }
+.print-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 16px; margin: 0; }
+.print-fields div { display: grid; grid-template-columns: minmax(110px, 0.8fr) 1.2fr; gap: 8px; }
+.print-fields dt { font-size: 0.82rem; font-weight: 700; }
+.print-fields dd { margin: 0; border-bottom: 1px solid #aab5b9; font-size: 0.88rem; }
+.print-two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.print-two-columns ul, .print-section ul { margin: 4px 0; padding-left: 20px; }
+.print-writing-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.print-writing-table th, .print-writing-table td { height: 30px; border: 1px solid #39474c; padding: 5px; }
+.print-writing-table th { background: #edf1f2; color: #15242a; }
+.print-footer { margin-top: 16px; padding-top: 6px; border-top: 1px solid #9da9ae; font-size: 0.74rem; }
 
 @media (max-width: 760px) {
   .month-calendar, .week-calendar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .calendar-weekday { display: none; }
   .calendar-day { min-height: 90px; }
+}
+
+@page { size: A4 portrait; margin: 10mm; }
+@media print {
+  .print-page { min-height: auto; background: #fff; print-color-adjust: exact; }
+  .print-actions { display: none; }
+  .print-sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+  .print-section { break-inside: avoid; }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -238,4 +270,6 @@ h1 {
   .schedule-filters select { border-color: #52666f; background: #111a20; color: #e7eff2; }
   .calendar-day { border-color: #31424b; }
   .schedule-card { background: #263b38; }
+  .queue-badge { background: #2e9e83; }
+  .print-page { background: #e8edef; color: #18262c; }
 }

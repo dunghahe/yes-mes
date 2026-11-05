@@ -16,6 +16,7 @@ from app.modules.assets.models import (
 from app.modules.auth.models import AuditLog, User
 from app.modules.blank_requests.models import (
     BlankRequestCounter,
+    BlankRequestPrint,
 )
 from app.modules.blank_requests.schemas import (
     BlankRequestCancel,
@@ -27,6 +28,9 @@ from app.modules.blank_requests.service import (
     ConcurrentBlankRequestChange,
     cancel_blank_request,
     create_blank_request,
+    list_blank_requests,
+    queue_print_stats,
+    register_print,
     request_resources,
     update_blank_request,
 )
@@ -356,6 +360,44 @@ def test_cancel_request_requires_reason_and_sets_terminal_status() -> None:
             BlankRequestCancel(reason="  ", version=cancelled.version)
         with pytest.raises(BlankRequestManagementError, match="đang chờ"):
             cancel_blank_request(db, request.id, "Hủy tiếp", cancelled.version, actor.id)
+        with pytest.raises(BlankRequestManagementError, match="đã hủy"):
+            register_print(db, request.id, "qc", actor.id)
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_print_events_record_each_form_and_allow_reprints() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
+        first_print, production_row = register_print(db, request.id, "production", actor.id)
+        second_print, qc_row = register_print(db, request.id, "qc", actor.id)
+        reprint, _ = register_print(db, request.id, "production", actor.id)
+        stats = queue_print_stats(db, [request.id])[request.id]
+        pending = list_blank_requests(db, status="submitted")
+
+        assert production_row[0].req_no == qc_row[0].req_no == request.req_no
+        assert first_print.form_type == "production"
+        assert second_print.form_type == "qc"
+        assert reprint.form_type == "production"
+        assert stats["production"][1] == 2
+        assert stats["qc"][1] == 1
+        assert len(pending) == 1
+        assert (
+            db.scalar(
+                select(AuditLog.id).where(
+                    AuditLog.table_name == "blank_request_prints",
+                    AuditLog.record_id == first_print.id,
+                    AuditLog.action == "print",
+                )
+            )
+            is not None
+        )
+        assert db.scalar(select(BlankRequestPrint.id).where(BlankRequestPrint.id == reprint.id))
     finally:
         db.rollback()
         db.close()

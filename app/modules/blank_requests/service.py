@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased
 
@@ -12,6 +12,7 @@ from app.modules.blank_requests.models import (
     BlankRequestCounter,
     BlankRequestOperator,
     BlankRequestPair,
+    BlankRequestPrint,
 )
 from app.modules.blank_requests.schemas import BlankRequestCreate, BlankRequestUpdate
 from app.modules.employees.models import Employee
@@ -468,26 +469,147 @@ def _request_values(
     }
 
 
-def list_blank_requests(db: Session):
-    return list(
-        db.execute(
-            select(
-                BlankRequest,
-                ProductionSchedule,
-                ProductionOrder,
-                Product,
-                Shift,
-                MachineGroup,
+def list_blank_requests(db: Session, *, status: str | None = None):
+    query = (
+        select(
+            BlankRequest,
+            ProductionSchedule,
+            ProductionOrder,
+            Product,
+            Shift,
+            MachineGroup,
+        )
+        .join(ProductionSchedule, ProductionSchedule.id == BlankRequest.schedule_id)
+        .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
+        .join(Product, Product.id == ProductionOrder.product_id)
+        .join(Shift, Shift.id == ProductionSchedule.shift_id)
+        .join(MachineGroup, MachineGroup.id == BlankRequest.machine_group_id)
+        .where(BlankRequest.deleted_at.is_(None))
+        .order_by(BlankRequest.created_at.desc(), BlankRequest.id.desc())
+    )
+    if status is not None:
+        query = query.where(BlankRequest.status == status)
+    return list(db.execute(query))
+
+
+def count_blank_requests(db: Session, *, status: str) -> int:
+    return (
+        db.scalar(
+            select(func.count(BlankRequest.id)).where(
+                BlankRequest.status == status,
+                BlankRequest.deleted_at.is_(None),
             )
-            .join(ProductionSchedule, ProductionSchedule.id == BlankRequest.schedule_id)
-            .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
-            .join(Product, Product.id == ProductionOrder.product_id)
-            .join(Shift, Shift.id == ProductionSchedule.shift_id)
-            .join(MachineGroup, MachineGroup.id == BlankRequest.machine_group_id)
-            .where(BlankRequest.deleted_at.is_(None))
-            .order_by(BlankRequest.created_at.desc(), BlankRequest.id.desc())
+        )
+        or 0
+    )
+
+
+def queue_print_stats(db: Session, request_ids: list[int]):
+    stats: dict[int, dict[str, tuple[datetime | None, int]]] = {
+        request_id: {
+            "production": (None, 0),
+            "qc": (None, 0),
+        }
+        for request_id in request_ids
+    }
+    if not request_ids:
+        return stats
+    for request_id, form_type, last_printed_at, print_count in db.execute(
+        select(
+            BlankRequestPrint.blank_request_id,
+            BlankRequestPrint.form_type,
+            func.max(BlankRequestPrint.printed_at),
+            func.count(BlankRequestPrint.id),
+        )
+        .where(
+            BlankRequestPrint.blank_request_id.in_(request_ids),
+            BlankRequestPrint.deleted_at.is_(None),
+        )
+        .group_by(BlankRequestPrint.blank_request_id, BlankRequestPrint.form_type)
+    ):
+        stats[request_id][form_type] = (last_printed_at, print_count)
+    return stats
+
+
+def get_printable_request(db: Session, request_id: int):
+    return db.execute(
+        select(BlankRequest, ProductionSchedule, ProductionOrder, Product, Shift, MachineGroup)
+        .join(ProductionSchedule, ProductionSchedule.id == BlankRequest.schedule_id)
+        .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
+        .join(Product, Product.id == ProductionOrder.product_id)
+        .join(Shift, Shift.id == ProductionSchedule.shift_id)
+        .join(MachineGroup, MachineGroup.id == BlankRequest.machine_group_id)
+        .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
+    ).first()
+
+
+def register_print(
+    db: Session, request_id: int, form_type: str, actor_id: int
+) -> tuple[BlankRequestPrint, object]:
+    row = get_printable_request(db, request_id)
+    if row is None:
+        raise BlankRequestManagementError("Không tìm thấy yêu cầu phôi.")
+    blank_request = row[0]
+    if blank_request.status == "cancelled":
+        raise BlankRequestManagementError("Không thể in yêu cầu đã hủy.")
+    now = datetime.now(UTC)
+    print_event = BlankRequestPrint(
+        blank_request_id=blank_request.id,
+        form_type=form_type,
+        printed_at=now,
+        printed_by=actor_id,
+        created_at=now,
+        updated_at=now,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(print_event)
+    db.flush()
+    _audit(
+        db,
+        actor_id,
+        "blank_request_prints",
+        print_event.id,
+        "print",
+        None,
+        {
+            "blank_request_id": blank_request.id,
+            "req_no": blank_request.req_no,
+            "form_type": form_type,
+            "printed_at": now.isoformat(),
+        },
+        "Kho in lại biểu" if queue_print_count(db, request_id, form_type) > 1 else "Kho in biểu",
+    )
+    return print_event, row
+
+
+def queue_print_count(db: Session, request_id: int, form_type: str) -> int:
+    return db.scalar(
+        select(func.count(BlankRequestPrint.id)).where(
+            BlankRequestPrint.blank_request_id == request_id,
+            BlankRequestPrint.form_type == form_type,
+            BlankRequestPrint.deleted_at.is_(None),
         )
     )
+
+
+def print_resource_details(db: Session, request_id: int):
+    pair_ids, operator_ids = request_resources(db, [request_id])[request_id]
+    machine_1 = aliased(Machine)
+    machine_2 = aliased(Machine)
+    pairs = list(
+        db.execute(
+            select(MachinePair, machine_1, machine_2)
+            .join(machine_1, machine_1.id == MachinePair.machine_1_id)
+            .join(machine_2, machine_2.id == MachinePair.machine_2_id)
+            .where(MachinePair.id.in_(pair_ids))
+            .order_by(MachinePair.id)
+        )
+    )
+    employees = list(
+        db.scalars(select(Employee).where(Employee.id.in_(operator_ids)).order_by(Employee.code))
+    )
+    return pairs, employees
 
 
 def active_groups(db: Session) -> list[MachineGroup]:

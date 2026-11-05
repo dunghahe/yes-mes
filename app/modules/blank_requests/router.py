@@ -1,6 +1,9 @@
+import base64
 import secrets
-from typing import Annotated
+from io import BytesIO
+from typing import Annotated, Literal
 
+import qrcode
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -29,6 +32,9 @@ from app.modules.blank_requests.service import (
     get_blank_request,
     list_blank_requests,
     operators_for_request,
+    print_resource_details,
+    queue_print_stats,
+    register_print,
     request_pair_options,
     request_resources,
     update_blank_request,
@@ -36,6 +42,7 @@ from app.modules.blank_requests.service import (
 from app.modules.users.models import UserPermission
 
 router = APIRouter(prefix="/blank-requests", tags=["blank-requests"])
+warehouse_router = APIRouter(prefix="/warehouse/blank-requests", tags=["warehouse"])
 templates = Jinja2Templates(directory="app/templates")
 STATUS_LABELS = {"submitted": "Chờ kho giao", "cancelled": "Đã hủy", "delivered": "Đã giao"}
 
@@ -359,3 +366,83 @@ def cancel_blank_request_submit(
         db.rollback()
         return _render_edit(request, db, actor, request_id, error=str(exc), status_code=409)
     return RedirectResponse("/blank-requests", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _queue_context(db: Session) -> dict[str, object]:
+    requests = list_blank_requests(db, status="submitted")
+    request_ids = [row[0].id for row in requests]
+    return {
+        "requests": requests,
+        "print_stats": queue_print_stats(db, request_ids),
+        "request_resources": request_resources(db, request_ids),
+        "queue_count": len(requests),
+        "queue_url": "/warehouse/blank-requests/queue-fragment",
+    }
+
+
+@warehouse_router.get("", response_class=HTMLResponse)
+def warehouse_queue_page(
+    request: Request,
+    _actor: Annotated[User, Depends(require_permission("blank_requests", "deliver"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> HTMLResponse:
+    token = secrets.token_urlsafe(32)
+    response = templates.TemplateResponse(
+        request=request,
+        name="warehouse/queue.html",
+        context={"title": "Yêu cầu phôi chờ giao", "csrf_token": token, **_queue_context(db)},
+    )
+    set_csrf_cookie(response, token)
+    return response
+
+
+@warehouse_router.get("/queue-fragment", response_class=HTMLResponse)
+def warehouse_queue_fragment(
+    request: Request,
+    _actor: Annotated[User, Depends(require_permission("blank_requests", "deliver"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="warehouse/queue_fragment.html",
+        context=_queue_context(db),
+    )
+
+
+@warehouse_router.get("/{request_id}/print/{form_type}", response_class=HTMLResponse)
+def print_blank_request_form(
+    request: Request,
+    request_id: int,
+    form_type: Literal["production", "qc"],
+    actor: Annotated[User, Depends(require_permission("blank_requests", "deliver"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    try:
+        print_event, row = register_print(db, request_id, form_type, actor.id)
+        db.commit()
+    except BlankRequestManagementError as exc:
+        db.rollback()
+        return Response(str(exc), status_code=409)
+    blank_request, schedule, order, product, shift, group = row
+    pair_options, operators = print_resource_details(db, blank_request.id)
+    qr_buffer = BytesIO()
+    qrcode.make(blank_request.req_no).save(qr_buffer, format="PNG")
+    qr_image = base64.b64encode(qr_buffer.getvalue()).decode("ascii")
+    return templates.TemplateResponse(
+        request=request,
+        name="warehouse/print_form.html",
+        context={
+            "title": "Biểu sản xuất" if form_type == "production" else "Biểu QC",
+            "form_type": form_type,
+            "blank_request": blank_request,
+            "schedule": schedule,
+            "order": order,
+            "product": product,
+            "shift": shift,
+            "group": group,
+            "pair_options": pair_options,
+            "operators": operators,
+            "print_event": print_event,
+            "qr_data_uri": f"data:image/png;base64,{qr_image}",
+        },
+    )

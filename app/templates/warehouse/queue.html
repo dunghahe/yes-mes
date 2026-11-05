@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel warehouse-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Kho nguyên vật liệu</p>
+    <h1 id="page-title">Yêu cầu phôi chờ giao <span class="queue-badge" id="queue-count" aria-live="polite">{{ queue_count }}</span></h1>
+    <div class="toolbar">
+      <a class="secondary-button button-link" href="/">Về trang chủ</a>
+      <button class="secondary-button" id="refresh-queue" type="button">Làm mới</button>
+    </div>
+    <p class="helper-text">Danh sách tự làm mới mỗi 15 giây. Có thể in lại biểu từ từng yêu cầu.</p>
+    <div id="queue-fragment" data-queue-url="{{ queue_url }}" data-count="{{ queue_count }}">
+      {% include "warehouse/queue_fragment.html" %}
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', path='js/warehouse-queue.js') }}" defer></script>
+{% endblock %}

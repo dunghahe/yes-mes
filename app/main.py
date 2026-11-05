@@ -16,7 +16,13 @@ from app.modules.assets.router import router as assets_router
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME, require_active_user
 from app.modules.auth.models import User
 from app.modules.auth.router import router as auth_router
-from app.modules.blank_requests.router import router as blank_requests_router
+from app.modules.blank_requests.router import (
+    router as blank_requests_router,
+)
+from app.modules.blank_requests.router import (
+    warehouse_router as warehouse_blank_requests_router,
+)
+from app.modules.blank_requests.service import count_blank_requests
 from app.modules.defects.router import router as defects_router
 from app.modules.downtime.router import router as downtime_router
 from app.modules.employees.router import router as employees_router
@@ -51,6 +57,7 @@ app.include_router(shifts_router)
 app.include_router(orders_router)
 app.include_router(schedules_router)
 app.include_router(blank_requests_router)
+app.include_router(warehouse_blank_requests_router)
 
 
 @app.middleware("http")
@@ -99,6 +106,7 @@ def home(
             "csrf_token": csrf_token,
             "today": today,
             "today_schedules": today_schedules,
+            "warehouse_queue_count": count_blank_requests(db, status="submitted"),
         },
     )
     set_csrf_cookie(response, csrf_token)

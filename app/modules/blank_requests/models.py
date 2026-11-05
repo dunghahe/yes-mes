@@ -135,3 +135,37 @@ class BlankRequestCounter(Base):
     )
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BlankRequestPrint(Base):
+    __tablename__ = "blank_request_prints"
+    __table_args__ = (
+        CheckConstraint(
+            "form_type IN ('production', 'qc')", name="ck_blank_request_prints_form_type"
+        ),
+        Index(
+            "ix_blank_request_prints_request_type_time",
+            "blank_request_id",
+            "form_type",
+            "printed_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    blank_request_id: Mapped[int] = mapped_column(
+        ForeignKey("blank_requests.id", ondelete="RESTRICT"), nullable=False
+    )
+    form_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    printed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    printed_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

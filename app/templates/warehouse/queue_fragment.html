@@ -1,0 +1,27 @@
+<div class="table-wrap" data-queue-count="{{ queue_count }}">
+  <table>
+    <thead><tr><th>Mã yêu cầu</th><th>Ngày · kíp</th><th>PO · mã hàng</th><th>Số lượng phôi</th><th>Nhóm · cặp · người làm</th><th>Biểu sản xuất</th><th>Biểu QC</th></tr></thead>
+    <tbody>
+      {% for blank_request, schedule, order, product, shift, group in requests %}
+        {% set pair_ids, operator_ids = request_resources[blank_request.id] %}
+        {% set production_time, production_count = print_stats[blank_request.id]["production"] %}
+        {% set qc_time, qc_count = print_stats[blank_request.id]["qc"] %}
+        <tr>
+          <td><strong>{{ blank_request.req_no }}</strong></td>
+          <td>{{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }}</td>
+          <td>{{ order.po_no }} · {{ product.code }}</td>
+          <td>{{ blank_request.blank_quantity }}</td>
+          <td>{{ group.code }} · {{ pair_ids|length }} cặp · {{ operator_ids|length }} người</td>
+          <td>
+            <a href="/warehouse/blank-requests/{{ blank_request.id }}/print/production" target="_blank" rel="noopener">In biểu SX{% if production_count %} ({{ production_count }}){% endif %}</a>
+            {% if production_time %}<small>Gần nhất {{ production_time.strftime('%H:%M %d/%m') }}</small>{% endif %}
+          </td>
+          <td>
+            <a href="/warehouse/blank-requests/{{ blank_request.id }}/print/qc" target="_blank" rel="noopener">In biểu QC{% if qc_count %} ({{ qc_count }}){% endif %}</a>
+            {% if qc_time %}<small>Gần nhất {{ qc_time.strftime('%H:%M %d/%m') }}</small>{% endif %}
+          </td>
+        </tr>
+      {% else %}<tr><td colspan="7">Hiện không có yêu cầu chờ giao.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

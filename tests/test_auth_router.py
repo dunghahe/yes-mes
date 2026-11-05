@@ -15,7 +15,12 @@ from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
-from app.modules.blank_requests.models import BlankRequest, BlankRequestOperator, BlankRequestPair
+from app.modules.blank_requests.models import (
+    BlankRequest,
+    BlankRequestOperator,
+    BlankRequestPair,
+    BlankRequestPrint,
+)
 from app.modules.defects.models import DefectCode
 from app.modules.downtime.models import DowntimeReason
 from app.modules.employees.models import Employee
@@ -713,12 +718,48 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
             login = client.post(
                 "/auth/login",
                 data={
+                    "username": warehouse.username,
+                    "password": "MatKhauHopLe-123",
+                    "csrf_token": csrf,
+                },
+            )
+            assert login.status_code == 303
+            queue_page = client.get("/warehouse/blank-requests")
+            assert queue_page.status_code == 200
+            assert "1" in re.search(r'id="queue-count"[^>]*>(.*?)</span>', queue_page.text).group(1)
+            assert client.get("/warehouse/blank-requests/queue-fragment").status_code == 200
+            production_print = client.get(
+                f"/warehouse/blank-requests/{blank_request.id}/print/production"
+            )
+            qc_print = client.get(f"/warehouse/blank-requests/{blank_request.id}/print/qc")
+            assert production_print.status_code == qc_print.status_code == 200
+            assert blank_request.req_no in production_print.text
+            assert blank_request.req_no in qc_print.text
+            assert "data:image/png;base64," in production_print.text
+            assert (
+                db.query(BlankRequestPrint).filter_by(blank_request_id=blank_request.id).count()
+                == 2
+            )
+
+        with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', login_page.text).group(1)
+            login = client.post(
+                "/auth/login",
+                data={
                     "username": data_entry.username,
                     "password": "MatKhauHopLe-123",
                     "csrf_token": csrf,
                 },
             )
             assert login.status_code == 303
+            assert client.get("/warehouse/blank-requests").status_code == 403
+            assert (
+                client.get(
+                    f"/warehouse/blank-requests/{blank_request.id}/print/production"
+                ).status_code
+                == 403
+            )
             edit_page = client.get(f"/blank-requests/{blank_request.id}")
             assert edit_page.status_code == 200
             csrf = re.search(r'name="csrf_token" value="([^\"]+)"', edit_page.text).group(1)
@@ -765,6 +806,9 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
             assert login.status_code == 303
             assert client.get("/blank-requests").status_code == 200
             assert client.get("/blank-requests/new").status_code == 403
+            queue_page = client.get("/warehouse/blank-requests")
+            assert queue_page.status_code == 200
+            assert "0" in re.search(r'id="queue-count"[^>]*>(.*?)</span>', queue_page.text).group(1)
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

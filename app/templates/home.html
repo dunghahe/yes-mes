@@ -23,6 +23,8 @@
     <p><a href="/schedules">Lịch sản xuất</a></p>
     {% if role in ["admin", "planning"] %}<p><a href="/schedules">Lịch sản xuất</a></p>{% endif %}
     {% if role in ["admin", "planning", "engineering", "warehouse", "data_entry"] %}<p><a href="/blank-requests">Yêu cầu xuất phôi</a></p>{% endif %}
+    {% if role in ["admin", "warehouse"] %}<p><a href="/warehouse/blank-requests">Hàng chờ Kho: {{ warehouse_queue_count }}</a></p>{% endif %}
+    {% if role == "data_entry" %}<p><a href="/blank-requests">Yêu cầu phôi cần cập nhật: {{ warehouse_queue_count }}</a></p>{% endif %}
     <form method="post" action="/auth/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="secondary-button" type="submit">Đăng xuất</button>
