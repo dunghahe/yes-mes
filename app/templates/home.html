@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="welcome-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Môi trường phát triển</p>
+    <h1 id="page-title">{{ title }}</h1>
+    <p class="intro">Nền tảng ứng dụng đã khởi tạo. Các chức năng sẽ được bổ sung theo từng giai đoạn đã thống nhất.</p>
+    <div class="status-row" role="status">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span>Ứng dụng đang hoạt động</span>
+    </div>
+  </section>
+{% endblock %}

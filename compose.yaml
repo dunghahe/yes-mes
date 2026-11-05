@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mes}
+      POSTGRES_USER: ${POSTGRES_USER:-mes_bootstrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env and set a local password}
+      MES_APP_PASSWORD: ${MES_APP_PASSWORD:?Set MES_APP_PASSWORD in .env}
+      MES_MIGRATOR_PASSWORD: ${MES_MIGRATOR_PASSWORD:?Set MES_MIGRATOR_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/10-create-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mes_app} -d ${POSTGRES_DB:-mes}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./app:/workspace/app
+      - ./tests:/workspace/tests
+      - ./migrations:/workspace/migrations
+      - ./alembic.ini:/workspace/alembic.ini:ro
+      - ./pyproject.toml:/workspace/pyproject.toml:ro
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
+    profiles: ["tools"]
+    environment:
+      APP_ENV: development
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./app:/workspace/app:ro
+      - ./migrations:/workspace/migrations
+      - ./alembic.ini:/workspace/alembic.ini:ro
+    command: ["alembic", "upgrade", "head"]
+
+volumes:
+  postgres_data:
