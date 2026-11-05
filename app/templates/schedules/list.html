@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Kế hoạch sản xuất</p>
+    <h1 id="page-title">Lịch sản xuất</h1>
+    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    {% if warning %}<p class="notice" role="status">{{ warning }}</p>{% endif %}
+
+    {% if can_create or (schedule and can_edit) %}
+    <form method="post" action="{% if schedule %}/schedules/{{ schedule.id }}{% else %}/schedules{% endif %}" class="form-stack schedule-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if schedule %}<input type="hidden" name="version" value="{{ schedule.version }}">{% endif %}
+      <h2>{% if schedule %}Sửa dòng lịch{% else %}Lập lịch{% endif %}</h2>
+      <label for="schedule-date-1">{% if schedule %}Ngày sản xuất{% else %}Ngày sản xuất (có thể chọn nhiều ngày){% endif %}</label>
+      <div id="schedule-dates" class="form-stack">
+        <input id="schedule-date-1" name="{% if schedule %}production_date{% else %}production_dates{% endif %}" type="date" required value="{{ schedule.production_date.isoformat() if schedule else submitted.get('production_dates', [''])[0] }}" aria-describedby="dates-error">
+        {% if not schedule and submitted.get('production_dates') %}
+          {% for item in submitted.get('production_dates')[1:] %}<input name="production_dates" type="date" required value="{{ item }}">{% endfor %}
+        {% endif %}
+      </div>
+      {% if errors.get('production_dates') %}<p id="dates-error" class="field-error">{{ errors.get('production_dates') }}</p>{% endif %}
+      {% if not schedule %}<button class="secondary-button" id="add-schedule-date" type="button">Thêm ngày</button>{% endif %}
+
+      <label for="schedule-shift">Kíp</label>
+      <select id="schedule-shift" name="shift_id" required aria-describedby="shift-error">
+        <option value="">-- Chọn kíp --</option>
+        {% for shift in active_shifts %}
+          {% set selected_shift = submitted.get('shift_id', schedule.shift_id if schedule else '') %}
+          <option value="{{ shift.id }}" {% if selected_shift|string == shift.id|string %}selected{% endif %}>{{ shift.name }} · {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.get('shift_id') %}<p id="shift-error" class="field-error">{{ errors.get('shift_id') }}</p>{% endif %}
+
+      <label for="schedule-order">PO</label>
+      <select id="schedule-order" name="order_id" required aria-describedby="order-error">
+        <option value="">-- Chọn PO --</option>
+        {% for order in active_orders %}
+          {% set selected_order = submitted.get('order_id', schedule.order_id if schedule else '') %}
+          <option value="{{ order.id }}" {% if selected_order|string == order.id|string %}selected{% endif %}>{{ order.po_no }} · {{ order.ordered_quantity }} sản phẩm</option>
+        {% endfor %}
+      </select>
+      {% if errors.get('order_id') %}<p id="order-error" class="field-error">{{ errors.get('order_id') }}</p>{% endif %}
+
+      <label for="planned-quantity">Số lượng kế hoạch cho mỗi ngày</label>
+      <input id="planned-quantity" name="planned_quantity" type="number" min="1" step="1" required value="{{ submitted.get('planned_quantity', schedule.planned_quantity if schedule else '') }}" aria-describedby="quantity-error">
+      {% if errors.get('planned_quantity') %}<p id="quantity-error" class="field-error">{{ errors.get('planned_quantity') }}</p>{% endif %}
+      <p class="helper-text">Tổng kế hoạch có thể vượt số lượng đặt; hệ thống sẽ cảnh báo khi lưu. Không chọn nhóm máy ở bước lập lịch.</p>
+      <button class="primary-button" type="submit">{% if schedule %}Lưu lịch{% else %}Lưu lịch{% endif %}</button>
+      {% if schedule %}<a class="secondary-button button-link" href="/schedules">Hủy sửa</a>{% endif %}
+    </form>
+    {% endif %}
+
+    <h2>Các dòng lịch</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ngày</th><th>Kíp</th><th>Số PO</th><th>Mã hàng</th><th>Số lượng kế hoạch</th><th></th></tr></thead>
+        <tbody>
+          {% for item, order, shift, product in schedules %}
+            <tr>
+              <td>{{ item.production_date.strftime('%d/%m/%Y') }}</td>
+              <td>{{ shift.name }}</td>
+              <td>{{ order.po_no }}</td>
+              <td>{{ product.code }}</td>
+              <td>{{ item.planned_quantity }}</td>
+              <td>{% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa</a>{% endif %}</td>
+            </tr>
+          {% else %}<tr><td colspan="6">Chưa có lịch sản xuất.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if schedule and can_edit %}
+      <form method="post" action="/schedules/{{ schedule.id }}/delete" class="form-stack delete-schedule-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label><input type="checkbox" name="confirm_delete" value="yes" required> Tôi xác nhận xóa mềm dòng lịch này</label>
+        <button class="secondary-button" type="submit">Xóa lịch</button>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  {% if not schedule %}<script src="{{ url_for('static', path='js/schedule-dates.js') }}" defer></script>{% endif %}
+{% endblock %}

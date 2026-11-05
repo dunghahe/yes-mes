@@ -1,6 +1,6 @@
 import re
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
@@ -18,7 +18,9 @@ from app.modules.auth.totp import totp_code_for_counter
 from app.modules.defects.models import DefectCode
 from app.modules.downtime.models import DowntimeReason
 from app.modules.employees.models import Employee
+from app.modules.orders.models import ProductionOrder
 from app.modules.products.models import Product
+from app.modules.schedules.models import ProductionSchedule
 from app.modules.shifts.models import Shift
 
 
@@ -93,12 +95,31 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert client.get("/admin/defect-codes").status_code == 403
             assert client.get("/admin/downtime-reasons").status_code == 403
             assert client.get("/admin/shifts").status_code == 403
+            schedule_page = client.get("/schedules")
+            assert schedule_page.status_code == 200
+            assert 'action="/schedules"' not in schedule_page.text
+            schedule_token = client.cookies.get("mes_csrf")
+            assert schedule_token
+            assert (
+                client.post(
+                    "/schedules",
+                    data={
+                        "csrf_token": schedule_token,
+                        "production_dates": ["2026-11-05"],
+                        "shift_id": 1,
+                        "order_id": 1,
+                        "planned_quantity": 1,
+                    },
+                ).status_code
+                == 403
+            )
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
+            logout_page = client.get("/")
             logout_token = re.search(
                 r'action="/auth/logout".*?name="csrf_token" value="([^"]+)"',
-                home_response.text,
+                logout_page.text,
                 re.DOTALL,
             )
             assert logout_token is not None
@@ -135,7 +156,15 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
         default_process_type="FULL",
         is_active=True,
     )
-    db.add_all([user, product])
+    shift = Shift(
+        name=f"Kíp lịch {uuid4().hex}",
+        start_time=time(7),
+        end_time=time(15),
+        planned_break_minutes=30,
+        crosses_midnight=False,
+        is_active=True,
+    )
+    db.add_all([user, product, shift])
     db.flush()
 
     def override_db() -> Generator[Session, None, None]:
@@ -180,6 +209,24 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
             )
             assert response.status_code == 303
             assert po_no in client.get("/orders").text
+            order = db.query(ProductionOrder).filter_by(po_no=po_no).one()
+            schedule_page = client.get("/schedules")
+            schedule_csrf = re.search(
+                r'name="csrf_token" value="([^\"]+)"', schedule_page.text
+            ).group(1)
+            scheduled = client.post(
+                "/schedules",
+                data={
+                    "csrf_token": schedule_csrf,
+                    "production_dates": ["2026-11-06", "2026-11-07"],
+                    "shift_id": shift.id,
+                    "order_id": order.id,
+                    "planned_quantity": 50,
+                },
+            )
+            assert scheduled.status_code == 200
+            assert "Đã lưu 2 dòng lịch." in scheduled.text
+            assert db.query(ProductionSchedule).filter_by(order_id=order.id).count() == 2
 
         data_entry = User(
             username=f"operator-orders-{uuid4().hex}",

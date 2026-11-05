@@ -15,4 +15,5 @@
 - **Admin đầu tiên:** Tạo bằng lệnh CLI tương tác chạy trực tiếp trên máy chủ, chỉ khi chưa từng có tài khoản Admin; không tạo tài khoản Admin qua đăng ký web.
 - **Mật khẩu ban đầu/đặt lại:** Hệ thống sinh mật khẩu ngẫu nhiên và chỉ hiển thị một lần cho Admin chuyển tới người dùng qua kênh riêng; tài khoản phải đổi ở lần đăng nhập tiếp theo.
 - **Admin cuối cùng:** Luôn giữ ít nhất một Admin đang hoạt động; chặn khóa hoặc hạ vai trò Admin đang hoạt động cuối cùng.
+- **Xóa lịch sản xuất:** Được xóa mềm dòng lịch nếu yêu cầu phôi chưa được xác nhận giao. Yêu cầu phôi chưa giao vẫn giữ liên kết tới lịch đã xóa mềm. Nếu đã xác nhận giao thì chặn xóa lịch.
 
