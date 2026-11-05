@@ -1,0 +1,1 @@
+"""Product master data module."""

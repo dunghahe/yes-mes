@@ -14,6 +14,7 @@ from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
+from app.modules.products.models import Product
 
 
 def test_login_protects_home_and_logout_revokes_session() -> None:
@@ -81,6 +82,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert home_response.status_code == 200
             assert "Người dùng thử" in home_response.text
             assert client.get("/admin/users").status_code == 403
+            assert client.get("/admin/products").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -237,6 +239,29 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                 db.query(AuditLog).filter_by(table_name="users", record_id=created_user.id).one()
             )
             assert temporary_password not in str(audit.new_values)
+
+            product_page = client.get("/admin/products/new")
+            assert product_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', product_page.text).group(1)
+            product_code = f"SP-{uuid4().hex[:12]}"
+            created_product = client.post(
+                "/admin/products",
+                data={
+                    "csrf_token": csrf,
+                    "code": product_code,
+                    "name": "Sản phẩm thử nghiệm",
+                    "cycle_time_seconds": "4.25",
+                    "default_process_type": "FULL",
+                },
+            )
+            assert created_product.status_code == 303
+            product = db.query(Product).filter_by(code=product_code).one()
+            assert str(product.cycle_time_seconds) == "4.250"
+            product_audit = (
+                db.query(AuditLog).filter_by(table_name="products", record_id=product.id).one()
+            )
+            assert product_audit.actor_id is not None
+            assert product_audit.new_values["default_process_type"] == "FULL"
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

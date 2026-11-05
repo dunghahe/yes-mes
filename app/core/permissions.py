@@ -91,6 +91,17 @@ def has_permission(
     return (module, action) in (permissions or ()) or (module, action) in extra_permissions
 
 
+def require_admin(
+    user: Annotated[User, Depends(require_active_user)],
+) -> User:
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chức năng này chỉ dành cho Admin.",
+        )
+    return user
+
+
 def require_permission(module: str, action: str) -> Callable[..., User]:
     def check_permission(
         user: Annotated[User, Depends(require_active_user)],

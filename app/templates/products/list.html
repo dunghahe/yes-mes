@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Dữ liệu dùng chung</p>
+    <h1 id="page-title">Quản lý mã hàng</h1>
+    <p class="intro">Cycle time được tính bằng giây trên mỗi sản phẩm. Khi thay đổi, các báo cáo đã ghi vẫn giữ cycle time tại thời điểm nhập.</p>
+    <div class="toolbar">
+      <a class="primary-button button-link" href="/admin/products/new">Tạo mã hàng</a>
+      <a class="secondary-button button-link" href="/">Về trang chủ</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Mã hàng</th><th>Tên hàng</th><th>Cycle time (giây/con)</th><th>Loại công đoạn mặc định</th><th>Trạng thái</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for product in products %}
+            <tr>
+              <td>{{ product.code }}</td>
+              <td>{{ product.name }}</td>
+              <td>{{ product.cycle_time_seconds }}</td>
+              <td>{{ process_type_labels[product.default_process_type] }}</td>
+              <td>{% if product.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+              <td><a href="/admin/products/{{ product.id }}">Sửa</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6">Chưa có mã hàng.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

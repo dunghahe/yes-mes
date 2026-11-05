@@ -27,5 +27,6 @@ Phát triển trong Ubuntu WSL2 trên Windows. Docker Desktop cần bật WSL2 e
 
 Hướng dẫn đăng nhập, khởi tạo Admin và xử lý mất TOTP: `docs/auth-usage.md`.
 Hướng dẫn quản trị tài khoản: `docs/users-usage.md`.
+Hướng dẫn quản lý mã hàng: `docs/product-usage.md`.
 
 Không chạy `docker compose down -v` trên môi trường có dữ liệu cần giữ.
