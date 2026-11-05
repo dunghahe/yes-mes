@@ -14,7 +14,7 @@ Script `scripts/backup-postgres.sh` tạo bản dump PostgreSQL mỗi lần ch�
    ```
 
    Dùng chuỗi public recipient do lệnh cuối trả về làm `AGE_RECIPIENT`. Không đặt khóa riêng trên máy chủ ứng dụng.
-3. Tạo mount lưu trữ off-host, rồi đặt `OFFSITE_BACKUP_DIR` trỏ vào mount đó. Điền `BACKUP_DIR`, `OFFSITE_BACKUP_DIR` và `AGE_RECIPIENT` trong file `.env` được bảo vệ hoặc môi trường cron/systemd. Script đọc `.env` nhưng không export các bí mật database sang tiến trình `age`.
+3. Tạo mount lưu trữ off-host, rồi đặt `OFFSITE_BACKUP_DIR` trỏ vào mount đó. Cấu hình `BACKUP_DIR`, `OFFSITE_BACKUP_DIR` và `AGE_RECIPIENT` trong môi trường cron/systemd. Không đưa mật khẩu database vào môi trường script; Compose đọc `.env` riêng bên trong lệnh backup.
 4. Chạy thử từ repo và kiểm tra hai dòng `Backup complete` cùng `Encrypted off-host copy complete`:
 
    ```sh
@@ -23,7 +23,7 @@ Script `scripts/backup-postgres.sh` tạo bản dump PostgreSQL mỗi lần ch�
    AGE_RECIPIENT=age1... \
    ./scripts/backup-postgres.sh
    ```
-5. Đặt lịch chạy hằng ngày, ví dụ 02:00 UTC bằng cron. Ghi stdout/stderr vào log và cảnh báo người vận hành nếu lệnh trả mã lỗi khác 0. Không ghi khóa riêng hay mật khẩu database vào log.
+5. Đặt lịch chạy hằng ngày lúc 02:00 UTC bằng cron. Ghi stdout/stderr vào log và cảnh báo người vận hành nếu lệnh trả mã lỗi khác 0. Không ghi khóa riêng hay mật khẩu database vào log. Ví dụ cron có trong `docs/security-operations.md`.
 
 ## Khôi phục thử
 

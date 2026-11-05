@@ -26,6 +26,8 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       TOTP_ENCRYPTION_KEYS: ${TOTP_ENCRYPTION_KEYS:?Generate and set a Fernet key in .env}
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:-}
+      CLOUDFLARE_ACCESS_AUDIENCE: ${CLOUDFLARE_ACCESS_AUDIENCE:-}
     depends_on:
       db:
         condition: service_healthy

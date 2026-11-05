@@ -1,5 +1,7 @@
 # Bổ sung cho AGENTS.md
 
+> Tài liệu này ghi lại các yêu cầu bổ sung. Khi nội dung [CHỜ CHỐT] cũ mâu thuẫn với `AGENTS.md`, `docs/DECISIONS.md` hoặc `docs/OPEN_QUESTIONS.md` hiện hành, dùng các quyết định mới hơn làm chuẩn.
+
 Dán các mục dưới đây vào AGENTS.md. Mục nào có dấu [CHỜ CHỐT] thì chưa được tự làm, ghi vào `docs/OPEN_QUESTIONS.md` và hỏi lại.
 
 ## Tài liệu trong repo
@@ -78,9 +80,10 @@ Mỗi lát nhỏ (một usecase), một nhánh, một diff để review.
 - Khóa phiên bản thư viện bằng file lock, `pip-audit` chạy trong CI hoặc trước mỗi lần phát hành.
 - Backup: mỗi quý khôi phục thử một bản vào máy khác và kiểm số liệu.
 
-## Triển khai [CHỜ CHỐT]
-- Chưa chốt production chạy PostgreSQL cài trực tiếp trên Windows hay Docker. Chưa viết script triển khai cho đến khi chốt.
-- Dù chọn cách nào: `uvicorn` và `cloudflared` chạy như service tự khởi động lại, script backup có lịch chạy và ghi log kết quả.
+## Triển khai (đã chốt)
+- Production chạy Docker Compose trên Linux, dùng PostgreSQL và Cloudflare Tunnel/Access; môi trường phát triển dùng Windows/WSL2.
+- Ứng dụng kiểm chữ ký và claims của `Cf-Access-Jwt-Assertion` theo team domain và AUD tag đã cấu hình.
+- Backup hằng ngày, lưu 14 ngày, mã hóa bản sao off-host và ghi kết quả vào log; hướng dẫn ở `docs/backup-operations.md`.
 
 ## Quyết định đã chốt thêm khi cập nhật v1.2
 - Mã lỗi không gắn máy gợi ý (không có `defect_codes.default_machine_id`). QC vẫn chọn máy gây lỗi (tùy chọn) ở từng dòng NG.
@@ -88,6 +91,5 @@ Mỗi lát nhỏ (một usecase), một nhánh, một diff để review.
 - Tài liệu v1.2 đã khớp AGENTS.md về PostgreSQL cho cả dev, Cloudflare Tunnel với Access và TOTP cho Admin.
 
 ## Còn mở (hỏi người dùng, không tự quyết)
-- Khu ở UC04: dùng để làm gì, gắn vào máy hay cặp. Khu không phải nhóm máy. [CHỜ CHỐT] Chưa làm phần khu cho đến khi chốt.
-- Khổ giấy, hướng in biểu và số cặp tối đa trên một biểu.
+- Khổ giấy, hướng in biểu và số cặp tối đa trên một biểu; chốt theo mẫu giấy người dùng sẽ gửi.
 

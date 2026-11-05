@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Ho_Chi_Minh"
     session_idle_timeout_minutes: int = 60
     totp_encryption_keys: str | None = None
+    cloudflare_access_team_domain: str | None = None
+    cloudflare_access_audience: str | None = None
 
     model_config = SettingsConfigDict(extra="ignore")
 

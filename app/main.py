@@ -1,5 +1,6 @@
 import secrets
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -9,6 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.core.cloudflare_access import (
+    AccessTokenError,
+    validate_access_configuration,
+    verify_access_token,
+)
 from app.core.config import get_settings
 from app.core.csrf import set_csrf_cookie
 from app.core.db import get_db
@@ -35,6 +41,11 @@ from app.modules.shifts.router import router as shifts_router
 from app.modules.users.router import router as users_router
 
 settings = get_settings()
+access_team_domain = validate_access_configuration(
+    settings.cloudflare_access_team_domain, settings.cloudflare_access_audience
+)
+if settings.app_env == "production" and access_team_domain is None:
+    raise RuntimeError("Cloudflare Access team domain và audience phải được cấu hình ở production.")
 docs_url = "/docs" if settings.app_env == "development" else None
 
 app = FastAPI(
@@ -62,7 +73,24 @@ app.include_router(warehouse_blank_requests_router)
 
 @app.middleware("http")
 async def security_headers_and_sliding_cookie(request: Request, call_next):
-    response = await call_next(request)
+    response = None
+    if access_team_domain is not None:
+        token = request.headers.get("Cf-Access-Jwt-Assertion", "")
+        try:
+            import anyio
+
+            await anyio.to_thread.run_sync(
+                partial(
+                    verify_access_token,
+                    token,
+                    team_domain=access_team_domain,
+                    audience=settings.cloudflare_access_audience,
+                )
+            )
+        except AccessTokenError:
+            response = HTMLResponse("Không xác minh được phiên Cloudflare Access.", status_code=403)
+    if response is None:
+        response = await call_next(request)
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
         "object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "

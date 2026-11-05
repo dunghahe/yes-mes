@@ -5,12 +5,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname -- "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
-if [[ -f "$PROJECT_DIR/.env" ]]; then
-  # The project .env is trusted operator configuration; do not export its secrets to child tools.
-  # shellcheck disable=SC1091
-  source "$PROJECT_DIR/.env"
-fi
-
 : "${BACKUP_DIR:="$PROJECT_DIR/backups"}"
 : "${OFFSITE_BACKUP_DIR:?Set OFFSITE_BACKUP_DIR to a mounted off-host backup location}"
 : "${AGE_RECIPIENT:?Set AGE_RECIPIENT to the age public recipient}"

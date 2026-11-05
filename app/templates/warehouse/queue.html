@@ -11,12 +11,8 @@
     {% if quantity_mismatch %}<p class="form-error" role="alert">Đã ghi nhận giao phôi. Số thực giao khác số yêu cầu; hãy rà soát số lượng.</p>
     {% elif delivery_notice %}<p class="notice" role="status">Đã xác nhận giao phôi.</p>{% endif %}
     <p class="helper-text">Danh sách tự làm mới mỗi 15 giây. Có thể in lại biểu từ từng yêu cầu.</p>
-    <div id="queue-fragment" data-queue-url="{{ queue_url }}" data-count="{{ queue_count }}">
+    <div id="queue-fragment" hx-get="{{ queue_url }}" hx-trigger="load, every 15s, click from:#refresh-queue" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
       {% include "warehouse/queue_fragment.html" %}
     </div>
-  </section>
-{% endblock %}
-
-{% block scripts %}
-  <script src="{{ url_for('static', path='js/warehouse-queue.js') }}" defer></script>
+</section>
 {% endblock %}

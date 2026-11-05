@@ -1,0 +1,13 @@
+{
+  "name": "ygc-mes-assets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pinned frontend assets for YGC MES",
+  "scripts": {
+    "vendor": "node scripts/vendor-frontend.mjs"
+  },
+  "devDependencies": {
+    "@alpinejs/csp": "3.17.5",
+    "htmx.org": "2.0.11"
+  }
+}

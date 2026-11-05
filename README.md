@@ -25,6 +25,10 @@ Phát triển trong Ubuntu WSL2 trên Windows. Docker Desktop cần bật WSL2 e
 - Migration: `docker compose run --rm migrate`
 - Tạo migration: `docker compose run --rm migrate alembic revision --autogenerate -m "ten thay doi"`
 
+### Thư viện giao diện
+
+HTMX và Alpine CSP được ghim phiên bản trong `package-lock.json`, vendoring vào `app/static/vendor` và phục vụ từ ứng dụng, không dùng CDN. Khi nâng phiên bản: chạy `npm ci`, `npm audit`, rồi `npm run vendor`; kiểm tra và commit cả lockfile lẫn các file trong `app/static/vendor`.
+
 Hướng dẫn đăng nhập, khởi tạo Admin và xử lý mất TOTP: `docs/auth-usage.md`.
 Hướng dẫn quản trị tài khoản: `docs/users-usage.md`.
 Hướng dẫn quản lý mã hàng: `docs/product-usage.md`.

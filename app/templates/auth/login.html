@@ -11,7 +11,10 @@
       <label for="username">Tên đăng nhập</label>
       <input id="username" name="username" autocomplete="username" required autofocus>
       <label for="password">Mật khẩu</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <div class="password-field" x-data="{ visible: false }">
+        <input id="password" name="password" type="password" x-bind:type="visible ? 'text' : 'password'" autocomplete="current-password" required>
+        <button class="secondary-button" type="button" x-on:click="visible = !visible" x-text="visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">Hiện mật khẩu</button>
+      </div>
       <label for="totp-code">Mã xác thực (chỉ dành cho Admin đã thiết lập TOTP)</label>
       <input id="totp-code" name="totp_code" inputmode="numeric" autocomplete="one-time-code">
       <button class="primary-button" type="submit">Đăng nhập</button>

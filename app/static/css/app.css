@@ -53,6 +53,7 @@ body {
   color: #17252f;
   font: inherit;
 }
+.password-field { display: grid; gap: 8px; }
 .form-stack select {
   width: 100%;
   min-height: 44px;
