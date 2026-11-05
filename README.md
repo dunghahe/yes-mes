@@ -32,5 +32,6 @@ Hướng dẫn quản lý máy, cặp và nhóm máy: `docs/assets-usage.md`.
 Hướng dẫn quản lý nhân viên: `docs/employees-usage.md`.
 Hướng dẫn quản lý mã lỗi: `docs/defect-codes-usage.md`.
 Hướng dẫn quản lý lý do dừng máy: `docs/downtime-usage.md`.
+Hướng dẫn quản lý kíp: `docs/shifts-usage.md`.
 
 Không chạy `docker compose down -v` trên môi trường có dữ liệu cần giữ.

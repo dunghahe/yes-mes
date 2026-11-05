@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
+    <h1 id="page-title">Quản lý kíp</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+    <p class="helper-text">Ngày sản xuất của kíp qua nửa đêm là ngày kíp bắt đầu.</p>
+
+    <section class="subsection" aria-labelledby="create-title">
+      <h2 id="create-title">Thêm kíp</h2>
+      <form method="post" action="/admin/shifts" class="form-stack shift-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="new-name">Tên kíp<input id="new-name" name="name" maxlength="100" required autofocus value="{{ submitted.get('name', '') }}" aria-describedby="name-error"></label>
+        {% if errors.get('name') %}<p id="name-error" class="field-error">{{ errors.get('name') }}</p>{% endif %}
+        <div class="shift-times">
+          <label for="new-start">Giờ bắt đầu<input id="new-start" type="time" step="60" name="start_time" required value="{{ submitted.get('start_time', '') }}" aria-describedby="start-error"></label>
+          {% if errors.get('start_time') %}<p id="start-error" class="field-error">{{ errors.get('start_time') }}</p>{% endif %}
+          <label for="new-end">Giờ kết thúc<input id="new-end" type="time" step="60" name="end_time" required value="{{ submitted.get('end_time', '') }}" aria-describedby="end-error"></label>
+          {% if errors.get('end_time') %}<p id="end-error" class="field-error">{{ errors.get('end_time') }}</p>{% endif %}
+        </div>
+        <label for="new-break">Nghỉ kế hoạch (phút)<input id="new-break" type="number" min="0" step="1" name="planned_break_minutes" required value="{{ submitted.get('planned_break_minutes', 0) }}" aria-describedby="break-error"></label>
+        {% if errors.get('planned_break_minutes') %}<p id="break-error" class="field-error">{{ errors.get('planned_break_minutes') }}</p>{% endif %}
+        <label class="checkbox-line" for="new-overnight"><input id="new-overnight" type="checkbox" name="crosses_midnight" value="true" {% if submitted.get('crosses_midnight') %}checked{% endif %}> Kíp qua nửa đêm</label>
+        {% if errors.get('crosses_midnight') or errors.get('form') %}<p class="field-error">{{ errors.get('crosses_midnight', errors.get('form')) }}</p>{% endif %}
+        <button class="primary-button" type="submit">Thêm kíp</button>
+      </form>
+    </section>
+
+    <section class="subsection" aria-labelledby="list-title">
+      <h2 id="list-title">Danh sách kíp</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Kíp</th><th>Bắt đầu</th><th>Kết thúc</th><th>Nghỉ (phút)</th><th>Qua nửa đêm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for shift in shifts %}
+              <tr>
+                <td>{{ shift.name }}</td><td>{{ shift.start_time.strftime('%H:%M') }}</td><td>{{ shift.end_time.strftime('%H:%M') }}</td>
+                <td>{{ shift.planned_break_minutes }}</td><td>{% if shift.crosses_midnight %}Có{% else %}Không{% endif %}</td>
+                <td>{% if shift.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+                <td><details><summary>Sửa</summary>
+                  <form method="post" action="/admin/shifts/{{ shift.id }}" class="form-stack compact-form shift-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="version" value="{{ shift.version }}">
+                    <label>Tên kíp<input name="name" maxlength="100" required value="{{ shift.name }}"></label>
+                    <label>Giờ bắt đầu<input type="time" step="60" name="start_time" required value="{{ shift.start_time.strftime('%H:%M') }}"></label>
+                    <label>Giờ kết thúc<input type="time" step="60" name="end_time" required value="{{ shift.end_time.strftime('%H:%M') }}"></label>
+                    <label>Nghỉ kế hoạch (phút)<input type="number" min="0" step="1" name="planned_break_minutes" required value="{{ shift.planned_break_minutes }}"></label>
+                    <label class="checkbox-line"><input type="checkbox" name="crosses_midnight" value="true" {% if shift.crosses_midnight %}checked{% endif %}> Kíp qua nửa đêm</label>
+                    <label class="checkbox-line"><input type="checkbox" name="is_active" value="true" {% if shift.is_active %}checked{% endif %}> Đang dùng</label>
+                    <button class="secondary-button" type="submit">Lưu kíp</button>
+                  </form>
+                </details></td>
+              </tr>
+            {% else %}<tr><td colspan="7">Chưa có kíp.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+{% endblock %}

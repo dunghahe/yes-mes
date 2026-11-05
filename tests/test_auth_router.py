@@ -19,6 +19,7 @@ from app.modules.defects.models import DefectCode
 from app.modules.downtime.models import DowntimeReason
 from app.modules.employees.models import Employee
 from app.modules.products.models import Product
+from app.modules.shifts.models import Shift
 
 
 def test_login_protects_home_and_logout_revokes_session() -> None:
@@ -91,6 +92,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert client.get("/admin/employees").status_code == 403
             assert client.get("/admin/defect-codes").status_code == 403
             assert client.get("/admin/downtime-reasons").status_code == 403
+            assert client.get("/admin/shifts").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -375,6 +377,28 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
             )
             assert created_reason.status_code == 303
             assert db.query(DowntimeReason).filter_by(code=reason_code).one().is_active
+
+            shift_page = client.get("/admin/shifts")
+            assert shift_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', shift_page.text).group(1)
+            created_shift = client.post(
+                "/admin/shifts",
+                data={
+                    "csrf_token": csrf,
+                    "name": f"Kíp đêm {asset_key}",
+                    "start_time": "22:00",
+                    "end_time": "06:00",
+                    "planned_break_minutes": 30,
+                    "crosses_midnight": "true",
+                },
+            )
+            assert created_shift.status_code == 303
+            shift = db.query(Shift).filter_by(name=f"Kíp đêm {asset_key}").one()
+            shift_audit = (
+                db.query(AuditLog).filter_by(table_name="shifts", record_id=shift.id).one()
+            )
+            assert shift.crosses_midnight
+            assert shift_audit.new_values["crosses_midnight"]
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()
