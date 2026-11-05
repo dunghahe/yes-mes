@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import AuditLog
+from app.modules.blank_requests.models import BlankRequest
 from app.modules.orders.models import ProductionOrder
 from app.modules.products.models import Product
 from app.modules.schedules.models import ProductionSchedule
@@ -96,6 +97,15 @@ def soft_delete_schedule(db: Session, schedule_id: int, actor_id: int) -> Produc
     )
     if schedule is None:
         raise ScheduleManagementError("Không tìm thấy dòng lịch.")
+    delivered_request = db.scalar(
+        select(BlankRequest.id).where(
+            BlankRequest.schedule_id == schedule.id,
+            BlankRequest.status == "delivered",
+            BlankRequest.deleted_at.is_(None),
+        )
+    )
+    if delivered_request is not None:
+        raise ScheduleManagementError("Không thể xóa lịch đã có yêu cầu phôi được xác nhận giao.")
     old_values = _values(schedule)
     now = datetime.now(UTC)
     schedule.deleted_at = now

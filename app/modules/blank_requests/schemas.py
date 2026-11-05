@@ -43,3 +43,8 @@ class BlankRequestCancel(BaseModel):
 
     reason: str = Field(min_length=3, max_length=500)
     version: int = Field(ge=1)
+
+
+class BlankRequestDelivery(BaseModel):
+    actual_quantity: int = Field(gt=0)
+    version: int = Field(ge=1)

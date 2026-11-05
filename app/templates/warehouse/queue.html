@@ -8,6 +8,8 @@
       <a class="secondary-button button-link" href="/">Về trang chủ</a>
       <button class="secondary-button" id="refresh-queue" type="button">Làm mới</button>
     </div>
+    {% if quantity_mismatch %}<p class="form-error" role="alert">Đã ghi nhận giao phôi. Số thực giao khác số yêu cầu; hãy rà soát số lượng.</p>
+    {% elif delivery_notice %}<p class="notice" role="status">Đã xác nhận giao phôi.</p>{% endif %}
     <p class="helper-text">Danh sách tự làm mới mỗi 15 giây. Có thể in lại biểu từ từng yêu cầu.</p>
     <div id="queue-fragment" data-queue-url="{{ queue_url }}" data-count="{{ queue_count }}">
       {% include "warehouse/queue_fragment.html" %}

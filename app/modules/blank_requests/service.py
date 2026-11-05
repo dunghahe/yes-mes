@@ -258,6 +258,51 @@ def cancel_blank_request(
     return blank_request
 
 
+def confirm_delivery(
+    db: Session,
+    request_id: int,
+    actual_quantity: int,
+    version: int,
+    actor_id: int,
+) -> tuple[BlankRequest, bool]:
+    blank_request = db.scalar(
+        select(BlankRequest)
+        .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
+        .with_for_update()
+    )
+    if blank_request is None:
+        raise BlankRequestManagementError("Không tìm thấy yêu cầu phôi.")
+    if blank_request.version != version:
+        raise ConcurrentBlankRequestChange("Yêu cầu đã thay đổi. Hãy tải lại trang rồi thử lại.")
+    if blank_request.status != "submitted":
+        raise BlankRequestManagementError("Chỉ xác nhận giao được yêu cầu đang chờ kho.")
+    if actual_quantity <= 0:
+        raise BlankRequestManagementError("Số lượng thực giao phải là số nguyên dương.")
+
+    pair_ids, operator_ids = request_resources(db, [request_id])[request_id]
+    old_values = _request_values(blank_request, pair_ids, operator_ids)
+    now = datetime.now(UTC)
+    blank_request.status = "delivered"
+    blank_request.delivered_quantity = actual_quantity
+    blank_request.delivered_at = now
+    blank_request.delivered_by = actor_id
+    blank_request.version += 1
+    blank_request.updated_at = now
+    blank_request.updated_by = actor_id
+    new_values = _request_values(blank_request, pair_ids, operator_ids)
+    _audit(
+        db,
+        actor_id,
+        "blank_requests",
+        blank_request.id,
+        "deliver",
+        old_values,
+        new_values,
+        "Kho xác nhận đã giao phôi",
+    )
+    return blank_request, actual_quantity != blank_request.blank_quantity
+
+
 def get_blank_request(db: Session, request_id: int):
     return db.execute(
         select(BlankRequest, ProductionSchedule, ProductionOrder, Product, Shift, MachineGroup)
@@ -466,6 +511,11 @@ def _request_values(
         "machine_pair_ids": pair_ids,
         "operator_ids": operator_ids,
         "status": blank_request.status,
+        "delivered_quantity": blank_request.delivered_quantity,
+        "delivered_at": blank_request.delivered_at.isoformat()
+        if blank_request.delivered_at
+        else None,
+        "delivered_by": blank_request.delivered_by,
     }
 
 

@@ -21,12 +21,14 @@ from app.modules.blank_requests.models import (
 from app.modules.blank_requests.schemas import (
     BlankRequestCancel,
     BlankRequestCreate,
+    BlankRequestDelivery,
     BlankRequestUpdate,
 )
 from app.modules.blank_requests.service import (
     BlankRequestManagementError,
     ConcurrentBlankRequestChange,
     cancel_blank_request,
+    confirm_delivery,
     create_blank_request,
     list_blank_requests,
     queue_print_stats,
@@ -298,6 +300,9 @@ def test_only_admin_can_edit_delivered_request_and_cannot_cancel_it() -> None:
         actor = fixtures["actor"]
         request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
         request.status = "delivered"
+        request.delivered_quantity = request.blank_quantity
+        request.delivered_at = datetime.now(UTC)
+        request.delivered_by = actor.id
         update_blank_request(
             db,
             request.id,
@@ -329,6 +334,42 @@ def test_only_admin_can_edit_delivered_request_and_cannot_cancel_it() -> None:
             )
         with pytest.raises(BlankRequestManagementError, match="Chỉ hủy được"):
             cancel_blank_request(db, request.id, "Không còn nhu cầu", request.version, actor.id)
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_confirm_delivery_warns_on_quantity_mismatch_and_audits_delivery() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
+
+        delivered, mismatch = confirm_delivery(db, request.id, 48, request.version, actor.id)
+
+        audit = db.scalar(
+            select(AuditLog)
+            .where(AuditLog.table_name == "blank_requests", AuditLog.record_id == request.id)
+            .order_by(AuditLog.id.desc())
+        )
+        assert mismatch
+        assert delivered.status == "delivered"
+        assert delivered.delivered_quantity == 48
+        assert delivered.delivered_by == actor.id
+        assert delivered.version == 2
+        assert audit.action == "deliver"
+        assert audit.old_values["status"] == "submitted"
+        assert audit.new_values["delivered_quantity"] == 48
+        assert audit.reason == "Kho xác nhận đã giao phôi"
+
+        with pytest.raises(ConcurrentBlankRequestChange, match="tải lại"):
+            confirm_delivery(db, request.id, 50, version=1, actor_id=actor.id)
+        with pytest.raises(BlankRequestManagementError, match="đang chờ kho"):
+            confirm_delivery(db, request.id, 50, delivered.version, actor.id)
+        with pytest.raises(ValidationError):
+            BlankRequestDelivery(actual_quantity=0, version=1)
     finally:
         db.rollback()
         db.close()

@@ -711,6 +711,24 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 db.query(BlankRequestOperator).filter_by(blank_request_id=blank_request.id).count()
                 == 1
             )
+            delivered_request = blank_request
+            request_page = client.get(
+                f"/blank-requests/new?schedule_id={schedule.id}&machine_group_id={group.id}"
+            )
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', request_page.text).group(1)
+            second_created = client.post(
+                "/blank-requests",
+                data={
+                    "csrf_token": csrf,
+                    "schedule_id": schedule.id,
+                    "blank_quantity": 40,
+                    "machine_group_id": group.id,
+                    "machine_pair_ids": [pair.id],
+                    "operator_ids": [operator.id],
+                },
+            )
+            assert second_created.status_code == 303
+            blank_request = db.query(BlankRequest).order_by(BlankRequest.id.desc()).first()
 
         with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
             login_page = client.get("/auth/login")
@@ -726,20 +744,35 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
             assert login.status_code == 303
             queue_page = client.get("/warehouse/blank-requests")
             assert queue_page.status_code == 200
-            assert "1" in re.search(r'id="queue-count"[^>]*>(.*?)</span>', queue_page.text).group(1)
+            assert "2" in re.search(r'id="queue-count"[^>]*>(.*?)</span>', queue_page.text).group(1)
             assert client.get("/warehouse/blank-requests/queue-fragment").status_code == 200
             production_print = client.get(
-                f"/warehouse/blank-requests/{blank_request.id}/print/production"
+                f"/warehouse/blank-requests/{delivered_request.id}/print/production"
             )
-            qc_print = client.get(f"/warehouse/blank-requests/{blank_request.id}/print/qc")
+            qc_print = client.get(f"/warehouse/blank-requests/{delivered_request.id}/print/qc")
             assert production_print.status_code == qc_print.status_code == 200
-            assert blank_request.req_no in production_print.text
-            assert blank_request.req_no in qc_print.text
+            assert delivered_request.req_no in production_print.text
+            assert delivered_request.req_no in qc_print.text
             assert "data:image/png;base64," in production_print.text
             assert (
-                db.query(BlankRequestPrint).filter_by(blank_request_id=blank_request.id).count()
+                db.query(BlankRequestPrint).filter_by(blank_request_id=delivered_request.id).count()
                 == 2
             )
+            delivery_page = client.get(f"/warehouse/blank-requests/{delivered_request.id}/delivery")
+            assert delivery_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', delivery_page.text).group(1)
+            delivered = client.post(
+                f"/warehouse/blank-requests/{delivered_request.id}/delivery",
+                data={
+                    "csrf_token": csrf,
+                    "version": delivered_request.version,
+                    "actual_quantity": 38,
+                },
+            )
+            assert delivered.status_code == 303
+            assert "quantity_mismatch=1" in delivered.headers["location"]
+            assert delivered_request.status == "delivered"
+            assert delivered_request.delivered_quantity == 38
 
         with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
             login_page = client.get("/auth/login")
@@ -758,6 +791,10 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 client.get(
                     f"/warehouse/blank-requests/{blank_request.id}/print/production"
                 ).status_code
+                == 403
+            )
+            assert (
+                client.get(f"/warehouse/blank-requests/{delivered_request.id}/delivery").status_code
                 == 403
             )
             edit_page = client.get(f"/blank-requests/{blank_request.id}")

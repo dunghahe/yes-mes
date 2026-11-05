@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
+from app.modules.assets.models import MachineGroup
 from app.modules.auth.models import AuditLog, User
+from app.modules.blank_requests.models import BlankRequest
 from app.modules.orders.schemas import OrderCreate
 from app.modules.orders.service import create_order
 from app.modules.products.models import Product
@@ -240,6 +242,78 @@ def test_soft_delete_schedule_records_old_values_and_excludes_it_from_totals() -
             db.scalar(select(ProductionSchedule.id).where(ProductionSchedule.deleted_at.is_(None)))
             is None
         )
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_soft_delete_schedule_keeps_linked_undelivered_request() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        actor, _, shift, order_id = _fixtures(db)
+        rows, _ = create_schedule_batch(
+            db,
+            _batch(shift.id, order_id, dates=[date(2026, 11, 10)], quantity=25),
+            actor.id,
+        )
+        group = MachineGroup(code=f"SG-{uuid4().hex}", name="Nhóm lịch", is_active=True)
+        db.add(group)
+        db.flush()
+        request = BlankRequest(
+            req_no=f"YC-{uuid4().hex[:20]}",
+            schedule_id=rows[0].id,
+            blank_quantity=25,
+            machine_group_id=group.id,
+            status="submitted",
+            created_by=actor.id,
+            updated_by=actor.id,
+        )
+        db.add(request)
+        db.flush()
+
+        deleted = soft_delete_schedule(db, rows[0].id, actor.id)
+
+        assert deleted.deleted_at is not None
+        assert request.schedule_id == deleted.id
+        assert request.deleted_at is None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_soft_delete_schedule_is_blocked_after_blank_request_delivery() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        actor, _, shift, order_id = _fixtures(db)
+        rows, _ = create_schedule_batch(
+            db,
+            _batch(shift.id, order_id, dates=[date(2026, 11, 10)], quantity=25),
+            actor.id,
+        )
+        group = MachineGroup(code=f"SG-{uuid4().hex}", name="Nhóm lịch", is_active=True)
+        db.add(group)
+        db.flush()
+        request = BlankRequest(
+            req_no=f"YC-{uuid4().hex[:20]}",
+            schedule_id=rows[0].id,
+            blank_quantity=25,
+            machine_group_id=group.id,
+            status="delivered",
+            delivered_quantity=24,
+            delivered_at=datetime.now(UTC),
+            delivered_by=actor.id,
+            created_by=actor.id,
+            updated_by=actor.id,
+        )
+        db.add(request)
+        db.flush()
+
+        with pytest.raises(ScheduleManagementError, match="đã có yêu cầu phôi"):
+            soft_delete_schedule(db, rows[0].id, actor.id)
+
+        assert rows[0].deleted_at is None
     finally:
         db.rollback()
         db.close()

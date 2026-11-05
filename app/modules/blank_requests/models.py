@@ -25,6 +25,17 @@ class BlankRequest(Base):
             "status IN ('submitted', 'cancelled', 'delivered')",
             name="ck_blank_requests_status",
         ),
+        CheckConstraint(
+            "delivered_quantity IS NULL OR delivered_quantity > 0",
+            name="ck_blank_requests_delivered_quantity_positive",
+        ),
+        CheckConstraint(
+            "(status = 'delivered' AND delivered_quantity IS NOT NULL "
+            "AND delivered_at IS NOT NULL AND delivered_by IS NOT NULL) "
+            "OR (status <> 'delivered' AND delivered_quantity IS NULL "
+            "AND delivered_at IS NULL AND delivered_by IS NULL)",
+            name="ck_blank_requests_delivery_matches_status",
+        ),
         Index(
             "uq_blank_requests_req_no_not_deleted",
             "req_no",
@@ -45,6 +56,9 @@ class BlankRequest(Base):
         ForeignKey("machine_groups.id", ondelete="RESTRICT"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="submitted")
+    delivered_quantity: Mapped[int | None] = mapped_column(Integer)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

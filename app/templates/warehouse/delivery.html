@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="auth-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Kho nguyên vật liệu</p>
+    <h1 id="page-title">Xác nhận giao phôi</h1>
+    <p><strong>{{ blank_request.req_no }}</strong></p>
+    <dl class="delivery-summary">
+      <div><dt>PO</dt><dd>{{ order.po_no }}</dd></div>
+      <div><dt>Mã hàng</dt><dd>{{ product.code }} · {{ product.name }}</dd></div>
+      <div><dt>Ngày · kíp</dt><dd>{{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }}</dd></div>
+      <div><dt>Số lượng yêu cầu</dt><dd>{{ blank_request.blank_quantity }}</dd></div>
+    </dl>
+    <form method="post" action="/warehouse/blank-requests/{{ blank_request.id }}/delivery" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="version" value="{{ blank_request.version }}">
+      <label for="actual-quantity">Số lượng thực giao</label>
+      <input id="actual-quantity" name="actual_quantity" type="number" min="1" step="1" required value="{{ blank_request.blank_quantity }}" autofocus>
+      <p class="helper-text">Nếu số thực giao khác số yêu cầu, hệ thống vẫn ghi nhận và hiện cảnh báo để rà soát.</p>
+      <button class="primary-button" type="submit">Xác nhận đã giao</button>
+      <a class="secondary-button button-link" href="/warehouse/blank-requests">Quay lại hàng chờ</a>
+    </form>
+  </section>
+{% endblock %}

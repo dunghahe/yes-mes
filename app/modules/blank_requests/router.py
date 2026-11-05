@@ -18,6 +18,7 @@ from app.modules.auth.models import User
 from app.modules.blank_requests.schemas import (
     BlankRequestCancel,
     BlankRequestCreate,
+    BlankRequestDelivery,
     BlankRequestUpdate,
 )
 from app.modules.blank_requests.service import (
@@ -28,8 +29,10 @@ from app.modules.blank_requests.service import (
     available_schedules,
     can_edit_request,
     cancel_blank_request,
+    confirm_delivery,
     create_blank_request,
     get_blank_request,
+    get_printable_request,
     list_blank_requests,
     operators_for_request,
     print_resource_details,
@@ -385,12 +388,20 @@ def warehouse_queue_page(
     request: Request,
     _actor: Annotated[User, Depends(require_permission("blank_requests", "deliver"))],
     db: Annotated[Session, Depends(get_db)],
+    delivered: bool = False,
+    quantity_mismatch: bool = False,
 ) -> HTMLResponse:
     token = secrets.token_urlsafe(32)
     response = templates.TemplateResponse(
         request=request,
         name="warehouse/queue.html",
-        context={"title": "Yêu cầu phôi chờ giao", "csrf_token": token, **_queue_context(db)},
+        context={
+            "title": "Yêu cầu phôi chờ giao",
+            "csrf_token": token,
+            "delivery_notice": delivered,
+            "quantity_mismatch": quantity_mismatch,
+            **_queue_context(db),
+        },
     )
     set_csrf_cookie(response, token)
     return response
@@ -406,6 +417,69 @@ def warehouse_queue_fragment(
         request=request,
         name="warehouse/queue_fragment.html",
         context=_queue_context(db),
+    )
+
+
+@warehouse_router.get("/{request_id}/delivery", response_class=HTMLResponse)
+def blank_request_delivery_page(
+    request: Request,
+    request_id: int,
+    _actor: Annotated[User, Depends(require_permission("blank_requests", "deliver"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    row = get_printable_request(db, request_id)
+    if row is None:
+        return Response("Không tìm thấy yêu cầu phôi.", status_code=404)
+    if row[0].status != "submitted":
+        return Response("Yêu cầu này không còn chờ xác nhận giao.", status_code=409)
+    token = secrets.token_urlsafe(32)
+    response = templates.TemplateResponse(
+        request=request,
+        name="warehouse/delivery.html",
+        context={
+            "title": "Xác nhận giao phôi",
+            "blank_request": row[0],
+            "schedule": row[1],
+            "order": row[2],
+            "product": row[3],
+            "shift": row[4],
+            "csrf_token": token,
+        },
+    )
+    set_csrf_cookie(response, token)
+    return response
+
+
+@warehouse_router.post("/{request_id}/delivery", response_class=HTMLResponse)
+def confirm_blank_request_delivery(
+    request: Request,
+    request_id: int,
+    csrf_token: Annotated[str, Form()],
+    actual_quantity: Annotated[int, Form()],
+    version: Annotated[int, Form()],
+    actor: Annotated[User, Depends(require_permission("blank_requests", "deliver"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    if not csrf_is_valid(request, csrf_token):
+        return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
+    try:
+        data = BlankRequestDelivery.model_validate(
+            {"actual_quantity": actual_quantity, "version": version}
+        )
+        _, quantity_mismatch = confirm_delivery(
+            db, request_id, data.actual_quantity, data.version, actor.id
+        )
+        db.commit()
+    except ValidationError:
+        db.rollback()
+        return Response("Số lượng thực giao phải là số nguyên dương.", status_code=422)
+    except BlankRequestManagementError as exc:
+        db.rollback()
+        return Response(str(exc), status_code=409)
+    return RedirectResponse(
+        "/warehouse/blank-requests?delivered=1"
+        + ("&quantity_mismatch=1" if quantity_mismatch else ""),
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
