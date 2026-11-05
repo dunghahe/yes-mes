@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
+    <h1 id="page-title">Danh mục mã lỗi</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+
+    <section class="subsection" aria-labelledby="create-title">
+      <h2 id="create-title">Thêm mã lỗi</h2>
+      <form method="post" action="/admin/defect-codes" class="inline-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Mã lỗi<input name="code" maxlength="100" required autofocus value="{{ submitted.get('code', '') }}"></label>
+        <label>Tên lỗi<input name="name" maxlength="200" required value="{{ submitted.get('name', '') }}"></label>
+        <label>Nhóm lỗi<input name="defect_group" maxlength="100" required value="{{ submitted.get('defect_group', '') }}"></label>
+        <label>Công đoạn phát hiện
+          <select name="detected_at" required>
+            {% for process in processes %}<option value="{{ process }}" {% if submitted.get('detected_at') == process %}selected{% endif %}>{{ process_labels[process] }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="primary-button" type="submit">Thêm mã lỗi</button>
+      </form>
+    </section>
+
+    <section class="subsection" aria-labelledby="list-title">
+      <h2 id="list-title">Danh sách mã lỗi</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã</th><th>Tên lỗi</th><th>Nhóm</th><th>Phát hiện tại</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for item in defect_codes %}
+              <tr>
+                <td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.defect_group }}</td>
+                <td>{{ process_labels[item.detected_at] }}</td>
+                <td>{% if item.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+                <td><details><summary>Sửa</summary>
+                  <form method="post" action="/admin/defect-codes/{{ item.id }}" class="form-stack compact-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="version" value="{{ item.version }}">
+                    <label>Mã lỗi<input name="code" maxlength="100" required value="{{ item.code }}"></label>
+                    <label>Tên lỗi<input name="name" maxlength="200" required value="{{ item.name }}"></label>
+                    <label>Nhóm lỗi<input name="defect_group" maxlength="100" required value="{{ item.defect_group }}"></label>
+                    <label>Công đoạn<select name="detected_at" required>{% for process in processes %}<option value="{{ process }}" {% if item.detected_at == process %}selected{% endif %}>{{ process_labels[process] }}</option>{% endfor %}</select></label>
+                    <label class="checkbox-line"><input type="checkbox" name="is_active" value="true" {% if item.is_active %}checked{% endif %}> Đang sử dụng</label>
+                    <button class="secondary-button" type="submit">Lưu thay đổi</button>
+                  </form>
+                </details></td>
+              </tr>
+            {% else %}<tr><td colspan="6">Chưa có mã lỗi.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="helper-text">Mã lỗi chỉ gắn với công đoạn phát hiện; QC chọn máy gây lỗi riêng trên từng dòng NG khi ghi nhận.</p>
+    </section>
+  </section>
+{% endblock %}

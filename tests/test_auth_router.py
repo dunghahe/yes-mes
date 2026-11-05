@@ -15,6 +15,7 @@ from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
+from app.modules.defects.models import DefectCode
 from app.modules.employees.models import Employee
 from app.modules.products.models import Product
 
@@ -87,6 +88,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert client.get("/admin/products").status_code == 403
             assert client.get("/admin/machines").status_code == 403
             assert client.get("/admin/employees").status_code == 403
+            assert client.get("/admin/defect-codes").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -339,6 +341,27 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                 db.query(AuditLog).filter_by(table_name="employees", record_id=employee.id).one()
             )
             assert employee_audit.new_values["employee_type"] == "operator"
+
+            defect_page = client.get("/admin/defect-codes")
+            assert defect_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', defect_page.text).group(1)
+            defect_code = f"NG-{asset_key}"
+            created_defect = client.post(
+                "/admin/defect-codes",
+                data={
+                    "csrf_token": csrf,
+                    "code": defect_code,
+                    "name": "Xước bề mặt",
+                    "defect_group": "Ngoại quan",
+                    "detected_at": "SX",
+                },
+            )
+            assert created_defect.status_code == 303
+            defect = db.query(DefectCode).filter_by(code=defect_code).one()
+            defect_audit = (
+                db.query(AuditLog).filter_by(table_name="defect_codes", record_id=defect.id).one()
+            )
+            assert defect_audit.new_values["detected_at"] == "SX"
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

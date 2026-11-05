@@ -1,0 +1,1 @@
+"""Defect code master data."""
