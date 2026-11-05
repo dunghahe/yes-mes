@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.db import engine, get_db
 from app.main import app
+from app.modules.assets.models import Machine, MachineGroup, MachinePair
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
-from app.modules.assets.models import Machine, MachineGroup, MachinePair
+from app.modules.employees.models import Employee
 from app.modules.products.models import Product
 
 
@@ -85,6 +86,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert client.get("/admin/users").status_code == 403
             assert client.get("/admin/products").status_code == 403
             assert client.get("/admin/machines").status_code == 403
+            assert client.get("/admin/employees").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -317,6 +319,26 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
             )
             assert response.status_code == 303
             assert group.name in client.get("/admin/machines").text
+
+            employee_page = client.get("/admin/employees")
+            assert employee_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', employee_page.text).group(1)
+            employee_code = f"NV-{asset_key}"
+            created_employee = client.post(
+                "/admin/employees",
+                data={
+                    "csrf_token": csrf,
+                    "code": employee_code,
+                    "name": "Nhân viên thử nghiệm",
+                    "employee_type": "operator",
+                },
+            )
+            assert created_employee.status_code == 303
+            employee = db.query(Employee).filter_by(code=employee_code).one()
+            employee_audit = (
+                db.query(AuditLog).filter_by(table_name="employees", record_id=employee.id).one()
+            )
+            assert employee_audit.new_values["employee_type"] == "operator"
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
+    <h1 id="page-title">Quản lý nhân viên</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+
+    <section class="subsection" aria-labelledby="create-title">
+      <h2 id="create-title">Thêm nhân viên</h2>
+      <form method="post" action="/admin/employees" class="inline-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="new-code">Mã nhân viên<input id="new-code" name="code" maxlength="100" required autofocus value="{{ submitted.get('code', '') }}" aria-describedby="code-error"></label>
+        {% if errors.get('code') %}<p id="code-error" class="field-error">{{ errors.get('code') }}</p>{% endif %}
+        <label for="new-name">Họ tên<input id="new-name" name="name" maxlength="200" required value="{{ submitted.get('name', '') }}" aria-describedby="name-error"></label>
+        {% if errors.get('name') %}<p id="name-error" class="field-error">{{ errors.get('name') }}</p>{% endif %}
+        <label for="new-type">Loại nhân viên
+          <select id="new-type" name="employee_type" required aria-describedby="type-error">
+            <option value="">-- Chọn loại --</option>
+            {% for employee_type in employee_types %}<option value="{{ employee_type }}" {% if submitted.get('employee_type') == employee_type %}selected{% endif %}>{{ type_labels[employee_type] }}</option>{% endfor %}
+          </select>
+        </label>
+        {% if errors.get('employee_type') %}<p id="type-error" class="field-error">{{ errors.get('employee_type') }}</p>{% endif %}
+        <button class="primary-button" type="submit">Thêm nhân viên</button>
+      </form>
+    </section>
+
+    <section class="subsection" aria-labelledby="list-title">
+      <h2 id="list-title">Danh sách nhân viên</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã</th><th>Họ tên</th><th>Loại</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for item in employees %}
+              <tr>
+                <td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ type_labels[item.employee_type] }}</td>
+                <td>{% if item.is_active %}Đang làm việc{% else %}Ngừng làm việc{% endif %}</td>
+                <td><details><summary>Sửa</summary>
+                  <form method="post" action="/admin/employees/{{ item.id }}" class="form-stack compact-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="version" value="{{ item.version }}">
+                    <label>Mã nhân viên<input name="code" maxlength="100" required value="{{ item.code }}"></label>
+                    <label>Họ tên<input name="name" maxlength="200" required value="{{ item.name }}"></label>
+                    <label>Loại nhân viên<select name="employee_type" required>{% for employee_type in employee_types %}<option value="{{ employee_type }}" {% if item.employee_type == employee_type %}selected{% endif %}>{{ type_labels[employee_type] }}</option>{% endfor %}</select></label>
+                    <label class="checkbox-line"><input type="checkbox" name="is_active" value="true" {% if item.is_active %}checked{% endif %}> Đang làm việc</label>
+                    <button class="secondary-button" type="submit">Lưu thay đổi</button>
+                  </form>
+                </details></td>
+              </tr>
+            {% else %}<tr><td colspan="5">Chưa có nhân viên.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="helper-text">Nhân viên ngừng làm việc được giữ để bảo toàn lịch sử và ẩn khỏi danh sách chọn.</p>
+    </section>
+  </section>
+{% endblock %}
