@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Quản trị</p>
+    <h1 id="page-title">Quản lý tài khoản</h1>
+    <p class="intro">Tài khoản bị khóa vẫn được giữ để bảo toàn lịch sử. Hệ thống không xóa tài khoản.</p>
+    <div class="toolbar">
+      <a class="primary-button button-link" href="/admin/users/new">Tạo tài khoản</a>
+      <a class="secondary-button button-link" href="/">Về trang chủ</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tên đăng nhập</th><th>Tên hiển thị</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for account in users %}
+            <tr>
+              <td>{{ account.username }}</td>
+              <td>{{ account.display_name }}</td>
+              <td>{{ role_labels[account.role] }}</td>
+              <td>{% if account.is_active %}Đang hoạt động{% else %}Đã khóa{% endif %}</td>
+              <td><a href="/admin/users/{{ account.id }}">Mở</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5">Chưa có tài khoản.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

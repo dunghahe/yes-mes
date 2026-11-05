@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="auth-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Quản trị tài khoản</p>
+    <h1 id="page-title">{{ title }}</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin/users" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="username">Tên đăng nhập</label>
+      <input id="username" name="username" maxlength="100" required value="{{ submitted.get('username', '') }}" aria-describedby="username-error">
+      {% if errors.get('username') %}<p id="username-error" class="field-error">{{ errors.get('username') }}</p>{% endif %}
+      <label for="display-name">Tên hiển thị</label>
+      <input id="display-name" name="display_name" maxlength="200" required value="{{ submitted.get('display_name', '') }}" aria-describedby="display-name-error">
+      {% if errors.get('display_name') %}<p id="display-name-error" class="field-error">{{ errors.get('display_name') }}</p>{% endif %}
+      <label for="role">Vai trò</label>
+      <select id="role" name="role" required aria-describedby="role-error">
+        {% for role_value, role_label in roles %}
+          <option value="{{ role_value }}" {% if submitted.get('role') == role_value %}selected{% endif %}>{{ role_label }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.get('role') %}<p id="role-error" class="field-error">{{ errors.get('role') }}</p>{% endif %}
+      <p class="helper-text">Hệ thống sinh mật khẩu tạm, hiển thị một lần và yêu cầu đổi mật khẩu ở lần đăng nhập đầu.</p>
+      <button class="primary-button" type="submit">Tạo tài khoản</button>
+      <a class="secondary-button button-link" href="/admin/users">Hủy</a>
+    </form>
+  </section>
+{% endblock %}

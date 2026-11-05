@@ -9,6 +9,9 @@
       <span class="status-dot" aria-hidden="true"></span>
       <span>Ứng dụng đang hoạt động</span>
     </div>
+    {% if role == "admin" %}
+      <p><a href="/admin/users">Quản lý tài khoản</a></p>
+    {% endif %}
     <form method="post" action="/auth/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="secondary-button" type="submit">Đăng xuất</button>

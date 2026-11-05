@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Quản trị tài khoản</p>
+    <h1 id="page-title">Sửa tài khoản</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin/users/{{ user.id }}" class="form-stack account-edit-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="version" value="{{ user.version }}">
+      <label for="username">Tên đăng nhập</label>
+      <input id="username" name="username" maxlength="100" required value="{{ submitted.get('username', user.username) }}" aria-describedby="username-error">
+      {% if errors.get('username') %}<p id="username-error" class="field-error">{{ errors.get('username') }}</p>{% endif %}
+      <label for="display-name">Tên hiển thị</label>
+      <input id="display-name" name="display_name" maxlength="200" required value="{{ submitted.get('display_name', user.display_name) }}" aria-describedby="display-name-error">
+      {% if errors.get('display_name') %}<p id="display-name-error" class="field-error">{{ errors.get('display_name') }}</p>{% endif %}
+      <label for="role">Vai trò</label>
+      <select id="role" name="role" required aria-describedby="role-error">
+        {% for role_value, role_label in roles %}
+          <option value="{{ role_value }}" {% if (submitted.get('role', user.role)) == role_value %}selected{% endif %}>{{ role_label }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.get('role') %}<p id="role-error" class="field-error">{{ errors.get('role') }}</p>{% endif %}
+      <label class="checkbox-line" for="is-active">
+        <input id="is-active" name="is_active" type="checkbox" value="true" {% if submitted.get('is_active', user.is_active) %}checked{% endif %}>
+        Tài khoản đang hoạt động
+      </label>
+      <p class="helper-text">Bỏ chọn để khóa tài khoản. Không thể tự khóa mình hoặc khóa/hạ vai trò Admin hoạt động cuối cùng.</p>
+      <button class="primary-button" type="submit">Lưu thay đổi</button>
+      <a class="secondary-button button-link" href="/admin/users">Quay lại danh sách</a>
+    </form>
+
+    <section class="subsection" aria-labelledby="permission-title">
+      <h2 id="permission-title">Quyền bổ sung</h2>
+      <p class="helper-text">Các quyền này chỉ cộng thêm quyền của vai trò. Khi cấp quyền tạo, sửa hoặc xóa, hãy chọn kèm quyền xem.</p>
+      <div class="permission-list">
+        {% for module in modules %}
+          {% set permission = permissions.get(module) %}
+          {% set is_submitted_module = permission_form_module is defined and permission_form_module == module %}
+          <form method="post" action="/admin/users/{{ user.id }}/permissions/{{ module }}" class="permission-row">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="version" value="{{ permission.version if permission else 0 }}">
+            <h3>{{ module_labels[module] }}</h3>
+            <label><input type="checkbox" name="can_view" value="true" {% if permission_form_values.can_view if is_submitted_module else (permission and permission.can_view) %}checked{% endif %}> Xem</label>
+            <label><input type="checkbox" name="can_create" value="true" {% if permission_form_values.can_create if is_submitted_module else (permission and permission.can_create) %}checked{% endif %}> Tạo</label>
+            <label><input type="checkbox" name="can_edit" value="true" {% if permission_form_values.can_edit if is_submitted_module else (permission and permission.can_edit) %}checked{% endif %}> Sửa</label>
+            <label><input type="checkbox" name="can_delete" value="true" {% if permission_form_values.can_delete if is_submitted_module else (permission and permission.can_delete) %}checked{% endif %}> Xóa</label>
+            {% if is_submitted_module and permission_form_error %}<p class="field-error" role="alert">{{ permission_form_error }}</p>{% endif %}
+            <button class="secondary-button" type="submit">Lưu quyền</button>
+          </form>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="subsection" aria-labelledby="password-title">
+      <h2 id="password-title">Đặt lại mật khẩu</h2>
+      <p class="helper-text">Hệ thống tạo mật khẩu mới và hiện một lần. Tất cả phiên cũ của tài khoản sẽ bị thu hồi.</p>
+      <form method="post" action="/admin/users/{{ user.id }}/reset-password">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="secondary-button" type="submit">Tạo mật khẩu tạm mới</button>
+      </form>
+    </section>
+  </section>
+{% endblock %}

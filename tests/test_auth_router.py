@@ -11,8 +11,8 @@ from app.core.config import get_settings
 from app.core.db import engine, get_db
 from app.main import app
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME
-from app.modules.auth.models import User
-from app.modules.auth.service import hash_password
+from app.modules.auth.models import AuditLog, User
+from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
 
 
@@ -80,6 +80,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             home_response = client.get("/")
             assert home_response.status_code == 200
             assert "Người dùng thử" in home_response.text
+            assert client.get("/admin/users").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -208,6 +209,34 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
             )
             assert recovery_login.status_code == 303
             assert recovery_login.headers["location"] == "/"
+
+            users_page = client.get("/admin/users")
+            assert users_page.status_code == 200
+            new_user_page = client.get("/admin/users/new")
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', new_user_page.text).group(1)
+            created_username = f"operator-created-{uuid4().hex}"
+            created = client.post(
+                "/admin/users",
+                data={
+                    "csrf_token": csrf,
+                    "username": created_username,
+                    "display_name": "Nhân viên vận hành",
+                    "role": "data_entry",
+                },
+            )
+            assert created.status_code == 200
+            temporary_password = re.search(
+                r'<code class="temporary-password">([^<]+)</code>', created.text
+            ).group(1)
+            assert created.headers["cache-control"] == "private, no-store"
+            assert len(temporary_password) >= 24
+            created_user = db.query(User).filter_by(username=created_username).one()
+            assert created_user.must_change_password
+            assert verify_password(temporary_password, created_user.password_hash)
+            audit = (
+                db.query(AuditLog).filter_by(table_name="users", record_id=created_user.id).one()
+            )
+            assert temporary_password not in str(audit.new_values)
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

@@ -12,6 +12,7 @@ from app.modules.auth.dependencies import SESSION_COOKIE_NAME, require_active_us
 from app.modules.auth.models import User
 from app.modules.auth.router import router as auth_router
 from app.modules.health.router import router as health_router
+from app.modules.users.router import router as users_router
 
 settings = get_settings()
 docs_url = "/docs" if settings.app_env == "development" else None
@@ -26,6 +27,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(users_router)
 
 
 @app.middleware("http")
@@ -64,6 +66,7 @@ def home(request: Request, user: Annotated[User, Depends(require_active_user)]) 
         context={
             "title": "Hệ thống nhập liệu sản lượng, NG và OEE",
             "display_name": user.display_name,
+            "role": user.role,
             "csrf_token": csrf_token,
         },
     )

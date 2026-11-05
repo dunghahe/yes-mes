@@ -13,4 +13,6 @@
 - **Phiên đăng nhập:** Tự hết hạn sau 60 phút không có thao tác; thao tác hợp lệ sẽ làm mới thời gian chờ.
 - **Giới hạn đăng nhập theo IP:** 100 lần đăng nhập sai trong 10 phút cho mỗi IP; đồng thời mỗi tài khoản khóa 10 phút sau 5 lần sai.
 - **Admin đầu tiên:** Tạo bằng lệnh CLI tương tác chạy trực tiếp trên máy chủ, chỉ khi chưa từng có tài khoản Admin; không tạo tài khoản Admin qua đăng ký web.
+- **Mật khẩu ban đầu/đặt lại:** Hệ thống sinh mật khẩu ngẫu nhiên và chỉ hiển thị một lần cho Admin chuyển tới người dùng qua kênh riêng; tài khoản phải đổi ở lần đăng nhập tiếp theo.
+- **Admin cuối cùng:** Luôn giữ ít nhất một Admin đang hoạt động; chặn khóa hoặc hạ vai trò Admin đang hoạt động cuối cùng.
 

@@ -53,6 +53,16 @@ body {
   color: #17252f;
   font: inherit;
 }
+.form-stack select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #aab9c0;
+  border-radius: 8px;
+  background: #fff;
+  color: #17252f;
+  font: inherit;
+}
 .form-stack input:focus-visible, .primary-button:focus-visible {
   outline: 3px solid #47aaa0;
   outline-offset: 2px;
@@ -94,6 +104,30 @@ body {
 .recovery-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0; list-style: none; }
 .recovery-list li { padding: 10px; border-radius: 6px; background: #eef5f4; }
 .button-link { margin-top: 16px; }
+.data-panel {
+  width: min(100%, 1120px);
+  padding: clamp(24px, 5vw, 44px);
+  border: 1px solid #d9e1e5;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(22 45 60 / 8%);
+}
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: 12px 10px; border-bottom: 1px solid #d9e1e5; }
+th { color: #40555e; font-size: 0.9rem; }
+.helper-text, .field-error { margin: 0; color: #50616a; line-height: 1.5; }
+.field-error { color: #a32118; }
+.checkbox-line { display: flex; align-items: center; gap: 10px; }
+.checkbox-line input, .permission-row input { width: 18px; height: 18px; accent-color: #176b67; }
+.subsection { margin-top: 36px; padding-top: 24px; border-top: 1px solid #d9e1e5; }
+.subsection h2 { margin: 0 0 8px; font-size: 1.35rem; }
+.permission-list { display: grid; gap: 12px; margin-top: 18px; }
+.permission-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px; border: 1px solid #d9e1e5; border-radius: 10px; }
+.permission-row h3 { flex: 1 1 100%; margin: 0; font-size: 1rem; }
+.permission-row label { display: inline-flex; align-items: center; gap: 6px; }
+.temporary-password { font-size: 1.2rem; overflow-wrap: anywhere; user-select: all; }
 .logout-form { margin-top: 28px; }
 .secondary-button {
   min-height: 40px;
@@ -150,7 +184,13 @@ h1 {
   .welcome-panel, .auth-panel { border-color: #31424b; background: #1a272e; box-shadow: none; }
   .intro, .status-row { color: #bacbd1; }
   .form-stack input { border-color: #52666f; background: #111a20; color: #e7eff2; }
+  .form-stack select { border-color: #52666f; background: #111a20; color: #e7eff2; }
   .form-error { border-color: #ff746c; background: #492522; color: #ffd6d2; }
   .secret-panel, .recovery-list li { background: #263b38; }
+  .data-panel { border-color: #31424b; background: #1a272e; box-shadow: none; }
+  th, td, .subsection { border-color: #31424b; }
+  th, .helper-text { color: #bacbd1; }
+  .permission-row { border-color: #31424b; }
+  .field-error { color: #ff9b93; }
   .status-dot { background: #55c7a4; box-shadow: 0 0 0 4px #263b38; }
 }
