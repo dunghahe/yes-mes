@@ -16,6 +16,7 @@ RUN if [ "$INSTALL_DEV" = "true" ]; then \
     && useradd --create-home --uid 10001 appuser
 
 COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser scripts ./scripts
 COPY --chown=appuser:appuser migrations ./migrations
 COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 

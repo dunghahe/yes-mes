@@ -10,4 +10,7 @@
 - **Nhập báo cáo:** Không có nút “Lưu nháp”. Người nhập gửi báo cáo bằng một thao tác xác nhận; chỉ báo cáo xác nhận thành công mới được tính vào tổng quan PO và OEE.
 - **TOTP:** Bắt buộc với tài khoản Admin.
 - **Môi trường:** Production chạy trên Linux; môi trường phát triển dùng Windows, có thể qua WSL2.
+- **Phiên đăng nhập:** Tự hết hạn sau 60 phút không có thao tác; thao tác hợp lệ sẽ làm mới thời gian chờ.
+- **Giới hạn đăng nhập theo IP:** 100 lần đăng nhập sai trong 10 phút cho mỗi IP; đồng thời mỗi tài khoản khóa 10 phút sau 5 lần sai.
+- **Admin đầu tiên:** Tạo bằng lệnh CLI tương tác chạy trực tiếp trên máy chủ, chỉ khi chưa từng có tài khoản Admin; không tạo tài khoản Admin qua đăng ký web.
 

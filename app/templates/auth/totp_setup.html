@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="auth-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Bảo vệ tài khoản Admin</p>
+    <h1 id="page-title">Thiết lập xác thực hai lớp</h1>
+    <p class="intro">Quét mã bằng ứng dụng tạo mã xác thực, hoặc nhập khóa thủ công. Sau đó nhập mã 6 chữ số để xác nhận.</p>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    {% if not secret %}
+      <form method="post" action="/auth/totp/setup/begin">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="primary-button" type="submit">Tạo mã thiết lập</button>
+      </form>
+    {% else %}
+      <div class="secret-panel">
+        <img class="totp-qr" src="{{ qr_data_uri }}" alt="Mã QR để thêm YGC MES vào ứng dụng xác thực">
+        <p><strong>Khóa thiết lập:</strong></p>
+        <code>{{ secret }}</code>
+        <p><strong>URI ứng dụng xác thực:</strong></p>
+        <code class="wrap-code">{{ provisioning_uri }}</code>
+      </div>
+      <form method="post" action="/auth/totp/setup/confirm" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="totp-code">Mã 6 chữ số</label>
+        <input id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required autofocus>
+        <button class="primary-button" type="submit">Xác nhận TOTP</button>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}

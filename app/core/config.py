@@ -10,6 +10,8 @@ class Settings(BaseSettings):
         "postgresql+psycopg://mes_migrator:local_dev_only@localhost:5432/mes"
     )
     timezone: str = "Asia/Ho_Chi_Minh"
+    session_idle_timeout_minutes: int = 60
+    totp_encryption_keys: str | None = None
 
     model_config = SettingsConfigDict(extra="ignore")
 

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="auth-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Lưu ở nơi an toàn</p>
+    <h1 id="page-title">Mã dự phòng TOTP</h1>
+    <p class="intro">Mỗi mã chỉ dùng được một lần. Màn hình này chỉ hiển thị bộ mã một lần; hãy lưu lại trước khi tiếp tục.</p>
+    <ul class="recovery-list">
+      {% for code in recovery_codes %}<li><code>{{ code }}</code></li>{% endfor %}
+    </ul>
+    <a class="primary-button button-link" href="/">Tiếp tục vào hệ thống</a>
+  </section>
+{% endblock %}

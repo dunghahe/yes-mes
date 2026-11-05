@@ -32,6 +32,80 @@ body {
   box-shadow: 0 16px 48px rgb(22 45 60 / 8%);
 }
 
+.auth-panel {
+  width: min(100%, 520px);
+  padding: clamp(28px, 6vw, 48px);
+  border: 1px solid #d9e1e5;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(22 45 60 / 8%);
+}
+
+.form-stack { display: grid; gap: 12px; margin-top: 22px; }
+.form-stack label { margin-top: 4px; font-weight: 650; }
+.form-stack input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #aab9c0;
+  border-radius: 8px;
+  background: #fff;
+  color: #17252f;
+  font: inherit;
+}
+.form-stack input:focus-visible, .primary-button:focus-visible {
+  outline: 3px solid #47aaa0;
+  outline-offset: 2px;
+}
+.primary-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #176b67;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+.form-error {
+  margin: 16px 0;
+  padding: 12px;
+  border-left: 4px solid #b42318;
+  border-radius: 4px;
+  background: #fff0ed;
+  color: #7a1b14;
+}
+.secret-panel {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 16px;
+  border-radius: 8px;
+  background: #eef5f4;
+}
+.secret-panel p { margin: 0; }
+.totp-qr { width: 192px; height: 192px; max-width: 100%; justify-self: center; background: #fff; }
+.wrap-code { overflow-wrap: anywhere; }
+.recovery-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0; list-style: none; }
+.recovery-list li { padding: 10px; border-radius: 6px; background: #eef5f4; }
+.button-link { margin-top: 16px; }
+.logout-form { margin-top: 28px; }
+.secondary-button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #80939b;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
 .eyebrow {
   margin: 0 0 12px;
   color: #176b67;
@@ -73,7 +147,10 @@ h1 {
 
 @media (prefers-color-scheme: dark) {
   :root, body { background: #111a20; color: #e7eff2; }
-  .welcome-panel { border-color: #31424b; background: #1a272e; box-shadow: none; }
+  .welcome-panel, .auth-panel { border-color: #31424b; background: #1a272e; box-shadow: none; }
   .intro, .status-row { color: #bacbd1; }
+  .form-stack input { border-color: #52666f; background: #111a20; color: #e7eff2; }
+  .form-error { border-color: #ff746c; background: #492522; color: #ffd6d2; }
+  .secret-panel, .recovery-list li { background: #263b38; }
   .status-dot { background: #55c7a4; box-shadow: 0 0 0 4px #263b38; }
 }

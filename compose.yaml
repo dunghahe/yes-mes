@@ -25,6 +25,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      TOTP_ENCRYPTION_KEYS: ${TOTP_ENCRYPTION_KEYS:?Generate and set a Fernet key in .env}
     depends_on:
       db:
         condition: service_healthy
@@ -32,6 +33,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./app:/workspace/app
+      - ./scripts:/workspace/scripts
       - ./tests:/workspace/tests
       - ./migrations:/workspace/migrations
       - ./alembic.ini:/workspace/alembic.ini:ro
