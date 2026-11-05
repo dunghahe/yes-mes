@@ -1,13 +1,17 @@
 import secrets
+from datetime import datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.csrf import set_csrf_cookie
+from app.core.db import get_db
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME, require_active_user
 from app.modules.auth.models import User
@@ -19,6 +23,7 @@ from app.modules.health.router import router as health_router
 from app.modules.orders.router import router as orders_router
 from app.modules.products.router import router as products_router
 from app.modules.schedules.router import router as schedules_router
+from app.modules.schedules.service import list_schedules
 from app.modules.shifts.router import router as shifts_router
 from app.modules.users.router import router as users_router
 
@@ -74,8 +79,14 @@ async def security_headers_and_sliding_cookie(request: Request, call_next):
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def home(request: Request, user: Annotated[User, Depends(require_active_user)]) -> HTMLResponse:
+def home(
+    request: Request,
+    user: Annotated[User, Depends(require_active_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> HTMLResponse:
     csrf_token = secrets.token_urlsafe(32)
+    today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+    today_schedules = list_schedules(db, start_date=today, end_date=today)
     response = templates.TemplateResponse(
         request=request,
         name="home.html",
@@ -84,6 +95,8 @@ def home(request: Request, user: Annotated[User, Depends(require_active_user)]) 
             "display_name": user.display_name,
             "role": user.role,
             "csrf_token": csrf_token,
+            "today": today,
+            "today_schedules": today_schedules,
         },
     )
     set_csrf_cookie(response, csrf_token)

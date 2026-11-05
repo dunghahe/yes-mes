@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -114,7 +114,15 @@ def soft_delete_schedule(db: Session, schedule_id: int, actor_id: int) -> Produc
     return schedule
 
 
-def list_schedules(db: Session, *, include_deleted: bool = False):
+def list_schedules(
+    db: Session,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    shift_id: int | None = None,
+    order_id: int | None = None,
+    include_deleted: bool = False,
+):
     query = (
         select(ProductionSchedule, ProductionOrder, Shift, Product)
         .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
@@ -124,6 +132,14 @@ def list_schedules(db: Session, *, include_deleted: bool = False):
     )
     if not include_deleted:
         query = query.where(ProductionSchedule.deleted_at.is_(None))
+    if start_date is not None:
+        query = query.where(ProductionSchedule.production_date >= start_date)
+    if end_date is not None:
+        query = query.where(ProductionSchedule.production_date <= end_date)
+    if shift_id is not None:
+        query = query.where(ProductionSchedule.shift_id == shift_id)
+    if order_id is not None:
+        query = query.where(ProductionSchedule.order_id == order_id)
     return list(db.execute(query))
 
 

@@ -9,6 +9,7 @@
       <span class="status-dot" aria-hidden="true"></span>
       <span>Ứng dụng đang hoạt động</span>
     </div>
+    {% include "schedules/today_list.html" %}
     {% if role == "admin" %}
       <p><a href="/admin/users">Quản lý tài khoản</a></p>
       <p><a href="/admin/products">Quản lý mã hàng</a></p>

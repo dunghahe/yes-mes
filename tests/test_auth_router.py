@@ -97,7 +97,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert client.get("/admin/shifts").status_code == 403
             schedule_page = client.get("/schedules")
             assert schedule_page.status_code == 200
-            assert 'action="/schedules"' not in schedule_page.text
+            assert 'method="post" action="/schedules"' not in schedule_page.text
             schedule_token = client.cookies.get("mes_csrf")
             assert schedule_token
             assert (
@@ -227,6 +227,17 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
             assert scheduled.status_code == 200
             assert "Đã lưu 2 dòng lịch." in scheduled.text
             assert db.query(ProductionSchedule).filter_by(order_id=order.id).count() == 2
+            day_view = client.get(
+                f"/schedules?view=day&on=2026-11-06&shift_id={shift.id}&order_id={order.id}"
+            )
+            assert day_view.status_code == 200
+            assert "Ngày này chưa có lịch sản xuất." not in day_view.text
+            assert po_no in day_view.text
+            week_view = client.get("/schedules?view=week&on=2026-11-06")
+            assert "Thứ 2" in week_view.text
+            assert po_no in week_view.text
+            month_view = client.get("/schedules?view=month&on=2026-11-01")
+            assert "Tháng 11/2026" in month_view.text
 
         data_entry = User(
             username=f"operator-orders-{uuid4().hex}",

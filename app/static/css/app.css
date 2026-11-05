@@ -189,6 +189,34 @@ h1 {
   box-shadow: 0 0 0 4px #e1f3ed;
 }
 
+.calendar-toolbar, .calendar-navigation, .view-switcher, .schedule-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.calendar-toolbar { justify-content: space-between; margin: 16px 0; }
+.view-switcher a, .calendar-navigation a { padding: 8px 12px; border: 1px solid #c8d5d9; border-radius: 8px; text-decoration: none; }
+.view-switcher a.active { background: #d9f1e9; border-color: #13856e; color: #145b4c; font-weight: 700; }
+.schedule-filters { margin: 16px 0; }
+.schedule-filters select { min-height: 40px; border: 1px solid #bac9ce; border-radius: 8px; padding: 6px 10px; background: #fff; color: #17272e; }
+.calendar-grid { display: grid; gap: 6px; }
+.month-calendar, .week-calendar { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.calendar-weekday { padding: 8px 4px; text-align: center; font-size: 0.85rem; font-weight: 700; }
+.calendar-day { min-height: 110px; padding: 8px; border: 1px solid #d8e1e4; border-radius: 8px; overflow-wrap: anywhere; }
+.calendar-day h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.outside-month { opacity: 0.55; }
+.schedule-card { display: grid; gap: 4px; margin: 5px 0; padding: 8px; border-left: 3px solid #13856e; border-radius: 5px; background: #edf7f3; font-size: 0.85rem; }
+.day-schedule, .today-schedule-list { display: grid; gap: 8px; }
+.today-schedule { margin: 24px 0; padding: 16px; border: 1px solid #d8e1e4; border-radius: 12px; }
+
+@media (max-width: 760px) {
+  .month-calendar, .week-calendar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calendar-weekday { display: none; }
+  .calendar-day { min-height: 90px; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root, body { background: #111a20; color: #e7eff2; }
   .welcome-panel, .auth-panel { border-color: #31424b; background: #1a272e; box-shadow: none; }
@@ -205,4 +233,9 @@ h1 {
   .compact-form { border-color: #31424b; }
   .field-error { color: #ff9b93; }
   .status-dot { background: #55c7a4; box-shadow: 0 0 0 4px #263b38; }
+  .view-switcher a, .calendar-navigation a, .today-schedule { border-color: #31424b; }
+  .view-switcher a.active { background: #263b38; color: #a8ead4; }
+  .schedule-filters select { border-color: #52666f; background: #111a20; color: #e7eff2; }
+  .calendar-day { border-color: #31424b; }
+  .schedule-card { background: #263b38; }
 }

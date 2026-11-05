@@ -1,6 +1,8 @@
+import calendar
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -30,6 +32,7 @@ from app.modules.users.models import UserPermission
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 templates = Jinja2Templates(directory="app/templates")
+LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 
 def _render(
@@ -42,15 +45,48 @@ def _render(
     errors: dict[str, str] | None = None,
     error: str | None = None,
     warning: str | None = None,
+    view: str = "month",
+    anchor: date | None = None,
+    shift_filter: int | None = None,
+    order_filter: int | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
+    anchor = anchor or datetime.now(LOCAL_TZ).date()
+    if view not in {"month", "week", "day"}:
+        view = "month"
+    start_date, end_date, calendar_days, previous, following, calendar_title = _calendar_window(
+        view, anchor
+    )
+    rows = list_schedules(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        shift_id=shift_filter,
+        order_id=order_filter,
+    )
+    by_date: dict[date, list[tuple]] = {day: [] for day in calendar_days}
+    for row in rows:
+        by_date[row[0].production_date].append(row)
+    weeks = [calendar_days[i : i + 7] for i in range(0, len(calendar_days), 7)]
     token = secrets.token_urlsafe(32)
     response = templates.TemplateResponse(
         request=request,
         name="schedules/list.html",
         context={
             "title": "Lịch sản xuất",
-            "schedules": list_schedules(db),
+            "schedules": rows,
+            "calendar_days": calendar_days,
+            "calendar_weeks": weeks,
+            "schedules_by_date": by_date,
+            "view": view,
+            "anchor": anchor.isoformat(),
+            "anchor_date": anchor,
+            "calendar_title": calendar_title,
+            "previous_date": previous.isoformat(),
+            "next_date": following.isoformat(),
+            "shift_filter": shift_filter,
+            "order_filter": order_filter,
+            "weekday_names": ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"],
             "active_orders": list(
                 db.execute(
                     select(ProductionOrder)
@@ -78,6 +114,39 @@ def _render(
     )
     set_csrf_cookie(response, token)
     return response
+
+
+def _calendar_window(view: str, anchor: date):
+    if view == "day":
+        start_date = end_date = anchor
+        calendar_days = [anchor]
+        previous = following = timedelta(days=1)
+        title = anchor.strftime("%d/%m/%Y")
+        return start_date, end_date, calendar_days, anchor - previous, anchor + following, title
+    if view == "week":
+        start_date = anchor - timedelta(days=anchor.weekday())
+        end_date = start_date + timedelta(days=6)
+        calendar_days = [start_date + timedelta(days=i) for i in range(7)]
+        return (
+            start_date,
+            end_date,
+            calendar_days,
+            start_date - timedelta(days=7),
+            start_date + timedelta(days=7),
+            f"{start_date.strftime('%d/%m')} – {end_date.strftime('%d/%m/%Y')}",
+        )
+    start_date = date(anchor.year, anchor.month, 1)
+    last_day = calendar.monthrange(anchor.year, anchor.month)[1]
+    end_date = date(anchor.year, anchor.month, last_day)
+    calendar_days = [
+        day
+        for week in calendar.Calendar(firstweekday=0).monthdatescalendar(anchor.year, anchor.month)
+        for day in week
+    ]
+    previous = (start_date - timedelta(days=1)).replace(day=1)
+    next_month = date(anchor.year + (anchor.month == 12), anchor.month % 12 + 1, 1)
+    title = f"Tháng {anchor.month:02d}/{anchor.year}"
+    return start_date, end_date, calendar_days, previous, next_month, title
 
 
 def _can_schedule_action(db: Session, actor: User, action: str) -> bool:
@@ -121,8 +190,20 @@ def schedules_page(
     request: Request,
     actor: Annotated[User, Depends(require_permission("schedules", "view"))],
     db: Annotated[Session, Depends(get_db)],
+    view: str = "month",
+    on: date | None = None,
+    shift_id: int | None = None,
+    order_id: int | None = None,
 ) -> HTMLResponse:
-    return _render(request, db, actor=actor)
+    return _render(
+        request,
+        db,
+        actor=actor,
+        view=view,
+        anchor=on,
+        shift_filter=shift_id,
+        order_filter=order_id,
+    )
 
 
 @router.post("", response_class=HTMLResponse)

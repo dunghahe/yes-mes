@@ -52,24 +52,79 @@
     </form>
     {% endif %}
 
-    <h2>Các dòng lịch</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Ngày</th><th>Kíp</th><th>Số PO</th><th>Mã hàng</th><th>Số lượng kế hoạch</th><th></th></tr></thead>
-        <tbody>
-          {% for item, order, shift, product in schedules %}
-            <tr>
-              <td>{{ item.production_date.strftime('%d/%m/%Y') }}</td>
-              <td>{{ shift.name }}</td>
-              <td>{{ order.po_no }}</td>
-              <td>{{ product.code }}</td>
-              <td>{{ item.planned_quantity }}</td>
-              <td>{% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa</a>{% endif %}</td>
-            </tr>
-          {% else %}<tr><td colspan="6">Chưa có lịch sản xuất.</td></tr>{% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <h2>Lịch theo {{ calendar_title }}</h2>
+    <nav class="calendar-toolbar" aria-label="Chọn kiểu xem lịch">
+      <div class="view-switcher">
+        {% for key, label in [("month", "Tháng"), ("week", "Tuần"), ("day", "Ngày")] %}
+          <a class="{% if view == key %}active{% endif %}" href="/schedules?view={{ key }}&on={{ anchor }}{% if shift_filter %}&shift_id={{ shift_filter }}{% endif %}{% if order_filter %}&order_id={{ order_filter }}{% endif %}" {% if view == key %}aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </div>
+      <div class="calendar-navigation">
+        <a href="/schedules?view={{ view }}&on={{ previous_date }}{% if shift_filter %}&shift_id={{ shift_filter }}{% endif %}{% if order_filter %}&order_id={{ order_filter }}{% endif %}" aria-label="Kỳ trước">‹ Trước</a>
+        <a href="/schedules?view={{ view }}&on={{ next_date }}{% if shift_filter %}&shift_id={{ shift_filter }}{% endif %}{% if order_filter %}&order_id={{ order_filter }}{% endif %}" aria-label="Kỳ sau">Sau ›</a>
+      </div>
+    </nav>
+    <form method="get" action="/schedules" class="schedule-filters">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="hidden" name="on" value="{{ anchor }}">
+      <label for="filter-shift">Lọc theo kíp</label>
+      <select id="filter-shift" name="shift_id">
+        <option value="">Tất cả kíp</option>
+        {% for shift in active_shifts %}<option value="{{ shift.id }}" {% if shift_filter == shift.id %}selected{% endif %}>{{ shift.name }}</option>{% endfor %}
+      </select>
+      <label for="filter-order">Lọc theo PO</label>
+      <select id="filter-order" name="order_id">
+        <option value="">Tất cả PO</option>
+        {% for order in active_orders %}<option value="{{ order.id }}" {% if order_filter == order.id %}selected{% endif %}>{{ order.po_no }}</option>{% endfor %}
+      </select>
+      <button class="secondary-button" type="submit">Lọc lịch</button>
+      {% if shift_filter or order_filter %}<a href="/schedules?view={{ view }}&on={{ anchor }}">Xóa bộ lọc</a>{% endif %}
+    </form>
+
+    {% if view == "month" %}
+      <div class="calendar-grid month-calendar" role="grid" aria-label="Lịch sản xuất tháng {{ anchor_date.month }}">
+        {% for weekday in weekday_names %}<div class="calendar-weekday" role="columnheader">{{ weekday }}</div>{% endfor %}
+        {% for week in calendar_weeks %}
+          {% for day in week %}
+            <section class="calendar-day {% if day.month != anchor_date.month %}outside-month{% endif %}" role="gridcell">
+              <h3>{{ day.day }}</h3>
+              {% for item, order, shift, product in schedules_by_date.get(day, []) %}
+                <article class="schedule-card">
+                  <strong>{{ order.po_no }}</strong>
+                  <span>{{ shift.name }} · {{ item.planned_quantity }} sp</span>
+                  {% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa</a>{% endif %}
+                </article>
+              {% endfor %}
+            </section>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    {% elif view == "week" %}
+      <div class="calendar-grid week-calendar" role="grid" aria-label="Lịch sản xuất tuần">
+        {% for day in calendar_days %}
+          <section class="calendar-day" role="gridcell">
+            <h3>{{ weekday_names[loop.index0] }}<br>{{ day.strftime('%d/%m') }}</h3>
+            {% for item, order, shift, product in schedules_by_date.get(day, []) %}
+              <article class="schedule-card">
+                <strong>{{ order.po_no }}</strong>
+                <span>{{ shift.name }} · {{ item.planned_quantity }} sp</span>
+                {% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa</a>{% endif %}
+              </article>
+            {% else %}<p class="helper-text">Chưa xếp lịch</p>{% endfor %}
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="day-schedule" aria-label="Lịch sản xuất ngày {{ calendar_title }}">
+        {% for item, order, shift, product in schedules %}
+          <article class="schedule-card">
+            <strong>{{ order.po_no }} · {{ product.code }}</strong>
+            <span>{{ shift.name }} · {{ item.planned_quantity }} sản phẩm kế hoạch</span>
+            {% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa lịch</a>{% endif %}
+          </article>
+        {% else %}<p>Ngày này chưa có lịch sản xuất.</p>{% endfor %}
+      </div>
+    {% endif %}
     {% if schedule and can_edit %}
       <form method="post" action="/schedules/{{ schedule.id }}/delete" class="form-stack delete-schedule-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

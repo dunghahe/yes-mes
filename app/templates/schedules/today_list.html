@@ -1,0 +1,16 @@
+<section class="today-schedule" aria-labelledby="today-schedule-title">
+  <h2 id="today-schedule-title">Lịch sản xuất hôm nay · {{ today.strftime('%d/%m/%Y') }}</h2>
+  {% if today_schedules %}
+    <div class="today-schedule-list">
+      {% for item, order, shift, product in today_schedules %}
+        <article class="schedule-card">
+          <strong>{{ order.po_no }} · {{ product.code }}</strong>
+          <span>{{ shift.name }} · {{ item.planned_quantity }} sản phẩm kế hoạch</span>
+          <a href="/schedules?view=day&on={{ today.isoformat() }}">Mở lịch hôm nay</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>Hôm nay chưa có lịch sản xuất.</p>
+  {% endif %}
+</section>

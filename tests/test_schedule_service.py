@@ -12,6 +12,7 @@ from app.modules.orders.schemas import OrderCreate
 from app.modules.orders.service import create_order
 from app.modules.products.models import Product
 from app.modules.schedules.models import ProductionSchedule
+from app.modules.schedules.router import _calendar_window
 from app.modules.schedules.schemas import ScheduleBatchCreate, ScheduleUpdate
 from app.modules.schedules.service import (
     ConcurrentScheduleChange,
@@ -77,6 +78,30 @@ def _batch(
         order_id=order_id,
         planned_quantity=quantity,
     )
+
+
+@pytest.mark.parametrize(
+    ("view", "anchor", "start", "end"),
+    [
+        ("day", date(2026, 11, 5), date(2026, 11, 5), date(2026, 11, 5)),
+        ("week", date(2026, 11, 5), date(2026, 11, 2), date(2026, 11, 8)),
+        ("month", date(2028, 2, 10), date(2028, 2, 1), date(2028, 2, 29)),
+    ],
+)
+def test_calendar_views_calculate_day_week_and_leap_month_ranges(
+    view: str, anchor: date, start: date, end: date
+) -> None:
+    actual_start, actual_end, days, _, _, _ = _calendar_window(view, anchor)
+    assert actual_start == start
+    assert actual_end == end
+    assert end in days
+    if view == "week":
+        assert days[0].weekday() == 0
+    elif view == "day":
+        assert days == [start]
+    else:
+        assert start in days
+        assert len(days) % 7 == 0
 
 
 def test_batch_schedule_creates_audited_rows_and_warns_when_order_is_exceeded() -> None:
