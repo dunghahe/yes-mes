@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="auth-panel order-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Kế hoạch sản xuất</p>
+    <h1 id="page-title">{{ title }}</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="{% if order %}/orders/{{ order.id }}{% else %}/orders{% endif %}" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if order %}<input type="hidden" name="version" value="{{ order.version }}">{% endif %}
+
+      <h2>Thông tin PO</h2>
+      <label for="po-no">Số PO</label>
+      <input id="po-no" name="po_no" maxlength="100" required autofocus value="{{ submitted.get('po_no', order.po_no if order else '') }}" aria-describedby="po-no-error">
+      {% if errors.get('po_no') %}<p id="po-no-error" class="field-error">{{ errors.get('po_no') }}</p>{% endif %}
+
+      <label for="product-id">Mã hàng</label>
+      <select id="product-id" name="product_id" required aria-describedby="product-error">
+        <option value="">-- Chọn mã hàng --</option>
+        {% if product and not product.is_active %}<option value="{{ product.id }}" selected>{{ product.code }} · {{ product.name }} (ngừng dùng)</option>{% endif %}
+        {% for item in products %}
+          <option value="{{ item.id }}" {% if submitted.get('product_id', order.product_id if order else '')|string == item.id|string %}selected{% endif %}>{{ item.code }} · {{ item.name }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.get('product_id') %}<p id="product-error" class="field-error">{{ errors.get('product_id') }}</p>{% endif %}
+
+      <label for="quantity">Tổng số lượng đặt</label>
+      <input id="quantity" name="ordered_quantity" type="number" min="1" step="1" required value="{{ submitted.get('ordered_quantity', order.ordered_quantity if order else '') }}" aria-describedby="quantity-error">
+      {% if errors.get('ordered_quantity') %}<p id="quantity-error" class="field-error">{{ errors.get('ordered_quantity') }}</p>{% endif %}
+
+      <label for="process-type">Loại công đoạn</label>
+      <select id="process-type" name="process_type" required aria-describedby="process-error">
+        <option value="">-- Chọn công đoạn --</option>
+        {% for process in process_types %}<option value="{{ process }}" {% if submitted.get('process_type', order.process_type if order else '') == process %}selected{% endif %}>{{ process_labels[process] }}</option>{% endfor %}
+      </select>
+      {% if errors.get('process_type') %}<p id="process-error" class="field-error">{{ errors.get('process_type') }}</p>{% endif %}
+
+      <h2>Thông tin Kho nguyên vật liệu</h2>
+      <label for="raw-code">Mã nguyên vật liệu</label>
+      <input id="raw-code" name="raw_material_code" maxlength="100" required value="{{ submitted.get('raw_material_code', order.raw_material_code if order else '') }}" aria-describedby="raw-code-error">
+      {% if errors.get('raw_material_code') %}<p id="raw-code-error" class="field-error">{{ errors.get('raw_material_code') }}</p>{% endif %}
+
+      <label for="drawing-number">Mã bản vẽ</label>
+      <input id="drawing-number" name="drawing_number" maxlength="100" required value="{{ submitted.get('drawing_number', order.drawing_number if order else '') }}" aria-describedby="drawing-error">
+      {% if errors.get('drawing_number') %}<p id="drawing-error" class="field-error">{{ errors.get('drawing_number') }}</p>{% endif %}
+
+      <label for="revision">REV</label>
+      <input id="revision" name="revision" maxlength="30" required value="{{ submitted.get('revision', order.revision if order else '') }}" aria-describedby="revision-error">
+      {% if errors.get('revision') %}<p id="revision-error" class="field-error">{{ errors.get('revision') }}</p>{% endif %}
+
+      <label for="material">Chất liệu</label>
+      <input id="material" name="material" maxlength="100" required value="{{ submitted.get('material', order.material if order else '') }}" aria-describedby="material-error">
+      {% if errors.get('material') %}<p id="material-error" class="field-error">{{ errors.get('material') }}</p>{% endif %}
+
+      <label for="blank-size">Kích cỡ phôi</label>
+      <input id="blank-size" name="blank_size" maxlength="100" required value="{{ submitted.get('blank_size', order.blank_size if order else '') }}" aria-describedby="blank-size-error">
+      {% if errors.get('blank_size') %}<p id="blank-size-error" class="field-error">{{ errors.get('blank_size') }}</p>{% endif %}
+
+      <label for="received-date">Ngày nhận ĐH</label>
+      <input id="received-date" name="order_received_date" type="date" required value="{{ submitted.get('order_received_date', order.order_received_date.isoformat() if order else '') }}" aria-describedby="received-date-error">
+      {% if errors.get('order_received_date') %}<p id="received-date-error" class="field-error">{{ errors.get('order_received_date') }}</p>{% endif %}
+
+      <label for="notes">Ghi chú</label>
+      <textarea id="notes" name="notes" maxlength="2000" rows="3">{{ submitted.get('notes', order.notes if order else '') }}</textarea>
+      <p class="helper-text">Mỗi PO gắn với một mã hàng, không quản lý theo lô. Loại công đoạn được lưu riêng tại PO, không tự đổi theo mặc định của mã hàng.</p>
+      {% if order %}<p class="helper-text">Khi có yêu cầu phôi, không thể đổi mã hàng hoặc loại công đoạn.</p>{% endif %}
+      <button class="primary-button" type="submit">{% if order %}Lưu PO{% else %}Tạo PO{% endif %}</button>
+      <a class="secondary-button button-link" href="/orders">Quay lại danh sách</a>
+    </form>
+  </section>
+{% endblock %}

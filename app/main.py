@@ -16,6 +16,7 @@ from app.modules.defects.router import router as defects_router
 from app.modules.downtime.router import router as downtime_router
 from app.modules.employees.router import router as employees_router
 from app.modules.health.router import router as health_router
+from app.modules.orders.router import router as orders_router
 from app.modules.products.router import router as products_router
 from app.modules.shifts.router import router as shifts_router
 from app.modules.users.router import router as users_router
@@ -40,6 +41,7 @@ app.include_router(downtime_router)
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(shifts_router)
+app.include_router(orders_router)
 
 
 @app.middleware("http")

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Kế hoạch sản xuất</p>
+    <h1 id="page-title">Danh sách PO</h1>
+    <div class="toolbar">
+      {% if can_create %}<a class="primary-button button-link" href="/orders/new">Tạo PO</a>{% endif %}
+      <a class="secondary-button button-link" href="/">Về trang chủ</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Số PO</th><th>Mã hàng</th><th>Tên hàng</th><th>Số lượng đặt</th><th>Công đoạn</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>
+          {% for order, product in orders %}
+            <tr>
+              <td>{{ order.po_no }}</td><td>{{ product.code }}</td><td>{{ product.name }}</td>
+              <td>{{ order.ordered_quantity }}</td><td>{{ process_labels[order.process_type] }}</td><td>Đang mở</td>
+              <td>{% if can_edit %}<a href="/orders/{{ order.id }}">Mở</a>{% endif %}</td>
+            </tr>
+          {% else %}<tr><td colspan="7">Chưa có PO.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

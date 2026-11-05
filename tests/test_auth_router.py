@@ -115,6 +115,105 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
         connection.close()
 
 
+def test_order_routes_allow_planning_and_reject_data_entry() -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+    db = Session(bind=connection, join_transaction_mode="create_savepoint")
+    username = f"planning-orders-{uuid4().hex}"
+    user = User(
+        username=username,
+        display_name="Kế hoạch thử nghiệm",
+        password_hash=hash_password("MatKhauHopLe-123"),
+        role="planning",
+        must_change_password=False,
+        password_changed_at=datetime.now(UTC),
+    )
+    product = Product(
+        code=f"ORD-{uuid4().hex}",
+        name="Mã hàng PO thử",
+        cycle_time_seconds=3,
+        default_process_type="FULL",
+        is_active=True,
+    )
+    db.add_all([user, product])
+    db.flush()
+
+    def override_db() -> Generator[Session, None, None]:
+        yield db
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', login_page.text).group(1)
+            login = client.post(
+                "/auth/login",
+                data={
+                    "username": username,
+                    "password": "MatKhauHopLe-123",
+                    "csrf_token": csrf,
+                },
+            )
+            assert login.status_code == 303
+            order_list = client.get("/orders")
+            assert order_list.status_code == 200
+            assert 'href="/orders/new"' in order_list.text
+            form_page = client.get("/orders/new")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', form_page.text).group(1)
+            po_no = f"PO-{uuid4().hex}"
+            response = client.post(
+                "/orders",
+                data={
+                    "csrf_token": csrf,
+                    "po_no": po_no,
+                    "product_id": product.id,
+                    "ordered_quantity": 120,
+                    "process_type": "FULL",
+                    "raw_material_code": "RM-01",
+                    "drawing_number": "DWG-01",
+                    "revision": "A",
+                    "material": "Thép",
+                    "blank_size": "10x20",
+                    "order_received_date": "2026-11-05",
+                    "notes": "",
+                },
+            )
+            assert response.status_code == 303
+            assert po_no in client.get("/orders").text
+
+        data_entry = User(
+            username=f"operator-orders-{uuid4().hex}",
+            display_name="Nhập liệu thử nghiệm",
+            password_hash=hash_password("MatKhauHopLe-123"),
+            role="data_entry",
+            must_change_password=False,
+            password_changed_at=datetime.now(UTC),
+        )
+        db.add(data_entry)
+        db.flush()
+        with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', login_page.text).group(1)
+            login = client.post(
+                "/auth/login",
+                data={
+                    "username": data_entry.username,
+                    "password": "MatKhauHopLe-123",
+                    "csrf_token": csrf,
+                },
+            )
+            assert login.status_code == 303
+            order_list = client.get("/orders")
+            assert order_list.status_code == 200
+            assert 'href="/orders/new"' not in order_list.text
+            assert client.get("/orders/new").status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        db.close()
+        outer_transaction.rollback()
+        connection.close()
+
+
 def test_admin_first_login_forces_password_change_and_totp_setup(
     monkeypatch,
 ) -> None:
