@@ -17,7 +17,7 @@
 - Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16. Không dùng SQLite.
 - Giao diện server-render bằng Jinja2 + HTMX + Alpine.js, CSS tự viết; hỗ trợ dark/light. Tự lưu JS/font trong repo, không dùng CDN hoặc script nội tuyến; Alpine dùng `@alpinejs/csp`, HTMX tắt eval.
 - In A4 bằng HTML/CSS và QR; Excel bằng openpyxl. Giao diện, nhãn và lỗi bằng tiếng Việt; thời gian `Asia/Ho_Chi_Minh`.
-- Dev trên Windows qua WSL2/Docker Compose; production chạy Linux. Cấu hình Docker Compose production còn chờ chốt trong `docs/OPEN_QUESTIONS.md`.
+- Dev trên Windows qua WSL2/Docker Compose; production chạy Docker Compose trên Linux, truy cập từ xa qua Cloudflare Tunnel/Access theo `docs/DECISIONS.md` và `docs/security-operations.md`.
 
 ## Cấu trúc dự kiến
 ```text

@@ -5,7 +5,7 @@
 Dán các mục dưới đây vào AGENTS.md. Mục nào có dấu [CHỜ CHỐT] thì chưa được tự làm, ghi vào `docs/OPEN_QUESTIONS.md` và hỏi lại.
 
 ## Tài liệu trong repo
-- Nguồn chuẩn nằm trong `docs/`: `thiet-ke-v1.1.md` (bản xuất từ Word), `he_thong_nhap_lieu_san_luong.drawio`, `OPEN_QUESTIONS.md`, `DECISIONS.md`.
+- Nguồn chuẩn nằm trong `docs/`: `Thiet_ke_chi_tiet_v1_2.docx`, `he_thong_nhap_lieu_san_luong (3).drawio`, `OPEN_QUESTIONS.md`, `DECISIONS.md`.
 - Không sửa tài liệu thiết kế. Khi mã nguồn và tài liệu mâu thuẫn, hoặc gặp điều tài liệu chưa nói: ghi câu hỏi vào `docs/OPEN_QUESTIONS.md` (kèm mục tài liệu liên quan và đề xuất của bạn), làm phần không bị ảnh hưởng, rồi dừng ở chỗ bị chặn. Không đoán.
 - Quyết định mới do người dùng chốt thì ghi vào `docs/DECISIONS.md` (ngày, nội dung).
 
