@@ -14,6 +14,7 @@ from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
+from app.modules.assets.models import Machine, MachineGroup, MachinePair
 from app.modules.products.models import Product
 
 
@@ -83,6 +84,7 @@ def test_login_protects_home_and_logout_revokes_session() -> None:
             assert "Người dùng thử" in home_response.text
             assert client.get("/admin/users").status_code == 403
             assert client.get("/admin/products").status_code == 403
+            assert client.get("/admin/machines").status_code == 403
             assert "mes_session=" in home_response.headers["set-cookie"]
             assert "content-security-policy" in home_response.headers
             assert "strict-transport-security" in home_response.headers
@@ -262,6 +264,59 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
             )
             assert product_audit.actor_id is not None
             assert product_audit.new_values["default_process_type"] == "FULL"
+
+            assets_page = client.get("/admin/machines")
+            assert assets_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^"]+)"', assets_page.text).group(1)
+            asset_key = uuid4().hex[:12]
+            first_machine_code = f"M1-{asset_key}"
+            second_machine_code = f"M2-{asset_key}"
+            for machine_code, area in (
+                (first_machine_code, "Khu A"),
+                (second_machine_code, "Khu B"),
+            ):
+                response = client.post(
+                    "/admin/machines/machines",
+                    data={
+                        "csrf_token": csrf,
+                        "code": machine_code,
+                        "name": f"Máy {machine_code}",
+                        "production_area": area,
+                    },
+                )
+                assert response.status_code == 303
+            group_code = f"G-{asset_key}"
+            response = client.post(
+                "/admin/machines/groups",
+                data={"csrf_token": csrf, "code": group_code, "name": "Nhóm máy thử"},
+            )
+            assert response.status_code == 303
+            first_machine = db.query(Machine).filter_by(code=first_machine_code).one()
+            second_machine = db.query(Machine).filter_by(code=second_machine_code).one()
+            group = db.query(MachineGroup).filter_by(code=group_code).one()
+            response = client.post(
+                "/admin/machines/pairs",
+                data={
+                    "csrf_token": csrf,
+                    "machine_1_id": first_machine.id,
+                    "machine_2_id": second_machine.id,
+                },
+            )
+            assert response.status_code == 303
+            pair = (
+                db.query(MachinePair)
+                .filter_by(
+                    machine_1_id=min(first_machine.id, second_machine.id),
+                    machine_2_id=max(first_machine.id, second_machine.id),
+                )
+                .one()
+            )
+            response = client.post(
+                f"/admin/machines/pairs/{pair.id}/group",
+                data={"csrf_token": csrf, "machine_group_id": group.id},
+            )
+            assert response.status_code == 303
+            assert group.name in client.get("/admin/machines").text
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()

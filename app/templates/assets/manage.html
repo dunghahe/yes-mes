@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
+    <h1 id="page-title">Máy, cặp và nhóm máy</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <p class="intro">Khu sản xuất được gắn với từng máy. Mỗi cặp gồm hai máy khác nhau; lịch sử chuyển cặp giữa các nhóm được lưu theo thời điểm hiệu lực.</p>
+    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+
+    <section class="subsection" aria-labelledby="machines-title">
+      <h2 id="machines-title">Máy</h2>
+      <form method="post" action="/admin/machines/machines" class="inline-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Mã máy<input name="code" maxlength="50" required autofocus></label>
+        <label>Tên máy<input name="name" maxlength="120" required></label>
+        <label>Khu sản xuất<input name="production_area" maxlength="100" required></label>
+        <button class="primary-button" type="submit">Thêm máy</button>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã</th><th>Tên máy</th><th>Khu sản xuất</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for machine in machines %}
+              <tr>
+                <td>{{ machine.code }}</td><td>{{ machine.name }}</td><td>{{ machine.production_area }}</td>
+                <td>{% if machine.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+                <td>
+                  <details><summary>Sửa</summary>
+                    <form method="post" action="/admin/machines/machines/{{ machine.id }}" class="form-stack compact-form">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="version" value="{{ machine.version }}">
+                      <label>Mã máy<input name="code" maxlength="50" required value="{{ machine.code }}"></label>
+                      <label>Tên máy<input name="name" maxlength="120" required value="{{ machine.name }}"></label>
+                      <label>Khu sản xuất<input name="production_area" maxlength="100" required value="{{ machine.production_area }}"></label>
+                      <label class="checkbox-line"><input type="checkbox" name="is_active" value="true" {% if machine.is_active %}checked{% endif %}> Đang sử dụng</label>
+                      <button class="secondary-button" type="submit">Lưu máy</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+            {% else %}<tr><td colspan="5">Chưa có máy.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="subsection" aria-labelledby="groups-title">
+      <h2 id="groups-title">Nhóm máy</h2>
+      <form method="post" action="/admin/machines/groups" class="inline-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Mã nhóm<input name="code" maxlength="50" required></label>
+        <label>Tên nhóm<input name="name" maxlength="120" required></label>
+        <button class="primary-button" type="submit">Thêm nhóm máy</button>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã</th><th>Tên nhóm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for group in groups %}
+              <tr>
+                <td>{{ group.code }}</td><td>{{ group.name }}</td><td>{% if group.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+                <td>
+                  <details><summary>Sửa</summary>
+                    <form method="post" action="/admin/machines/groups/{{ group.id }}" class="form-stack compact-form">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="version" value="{{ group.version }}">
+                      <label>Mã nhóm<input name="code" maxlength="50" required value="{{ group.code }}"></label>
+                      <label>Tên nhóm<input name="name" maxlength="120" required value="{{ group.name }}"></label>
+                      <label class="checkbox-line"><input type="checkbox" name="is_active" value="true" {% if group.is_active %}checked{% endif %}> Đang sử dụng</label>
+                      <button class="secondary-button" type="submit">Lưu nhóm</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+            {% else %}<tr><td colspan="4">Chưa có nhóm máy.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="subsection" aria-labelledby="pairs-title">
+      <h2 id="pairs-title">Cặp máy</h2>
+      <form method="post" action="/admin/machines/pairs" class="inline-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Máy thứ nhất
+          <select name="machine_1_id" required>
+            <option value="">-- Chọn máy --</option>
+            {% for machine in active_machines %}<option value="{{ machine.id }}">{{ machine.code }} · {{ machine.name }} ({{ machine.production_area }})</option>{% endfor %}
+          </select>
+        </label>
+        <label>Máy thứ hai
+          <select name="machine_2_id" required>
+            <option value="">-- Chọn máy --</option>
+            {% for machine in active_machines %}<option value="{{ machine.id }}">{{ machine.code }} · {{ machine.name }} ({{ machine.production_area }})</option>{% endfor %}
+          </select>
+        </label>
+        <button class="primary-button" type="submit">Tạo cặp</button>
+      </form>
+      <p class="helper-text">Một máy chỉ xuất hiện một lần trong cùng cặp. Không thể tạo trùng cặp dù chọn thứ tự máy ngược lại.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cặp</th><th>Khu</th><th>Nhóm hiện tại</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {% for pair, machine_1, machine_2, group in pairs %}
+              <tr>
+                <td>{{ machine_1.code }} + {{ machine_2.code }}</td>
+                <td>{{ machine_1.production_area }} / {{ machine_2.production_area }}</td>
+                <td>{{ group.name if group else "Chưa xếp nhóm" }}</td>
+                <td>{% if pair.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
+                <td class="pair-actions">
+                  {% if pair.is_active %}
+                    <form method="post" action="/admin/machines/pairs/{{ pair.id }}/group">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <label for="group-{{ pair.id }}">Nhóm máy</label>
+                      <select id="group-{{ pair.id }}" name="machine_group_id">
+                        <option value="">-- Chưa xếp nhóm --</option>
+                        {% for option in active_groups %}<option value="{{ option.id }}" {% if group and group.id == option.id %}selected{% endif %}>{{ option.code }} · {{ option.name }}</option>{% endfor %}
+                      </select>
+                      <button class="secondary-button" type="submit">Lưu nhóm</button>
+                    </form>
+                  {% endif %}
+                  <form method="post" action="/admin/machines/pairs/{{ pair.id }}/status">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="version" value="{{ pair.version }}">
+                    <input type="hidden" name="is_active" value="{{ 'false' if pair.is_active else 'true' }}">
+                    <button class="secondary-button" type="submit">{% if pair.is_active %}Ngừng dùng cặp{% else %}Dùng lại cặp{% endif %}</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}<tr><td colspan="5">Chưa có cặp máy.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+{% endblock %}

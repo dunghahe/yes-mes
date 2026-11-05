@@ -127,6 +127,16 @@ th { color: #40555e; font-size: 0.9rem; }
 .permission-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px; border: 1px solid #d9e1e5; border-radius: 10px; }
 .permission-row h3 { flex: 1 1 100%; margin: 0; font-size: 1rem; }
 .permission-row label { display: inline-flex; align-items: center; gap: 6px; }
+.inline-create-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 18px 0; }
+.inline-create-form label { display: grid; gap: 6px; min-width: 170px; flex: 1 1 180px; font-weight: 650; }
+.inline-create-form input, .inline-create-form select, .compact-form input, .pair-actions select {
+  min-height: 42px; padding: 8px 10px; border: 1px solid #aab9c0; border-radius: 8px; background: #fff; color: #17252f; font: inherit;
+}
+.compact-form { max-width: 320px; padding: 12px; border: 1px solid #d9e1e5; border-radius: 8px; }
+.compact-form label { display: grid; gap: 5px; }
+.pair-actions { min-width: 220px; }
+.pair-actions form { display: grid; gap: 8px; margin: 6px 0; }
+details summary { color: #176b67; cursor: pointer; font-weight: 650; }
 .temporary-password { font-size: 1.2rem; overflow-wrap: anywhere; user-select: all; }
 .logout-form { margin-top: 28px; }
 .secondary-button {
@@ -191,6 +201,8 @@ h1 {
   th, td, .subsection { border-color: #31424b; }
   th, .helper-text { color: #bacbd1; }
   .permission-row { border-color: #31424b; }
+  .inline-create-form input, .inline-create-form select, .compact-form input, .pair-actions select { border-color: #52666f; background: #111a20; color: #e7eff2; }
+  .compact-form { border-color: #31424b; }
   .field-error { color: #ff9b93; }
   .status-dot { background: #55c7a4; box-shadow: 0 0 0 4px #263b38; }
 }
