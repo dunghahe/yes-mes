@@ -17,11 +17,18 @@ from app.modules.auth.models import AuditLog, User
 from app.modules.blank_requests.models import (
     BlankRequestCounter,
 )
-from app.modules.blank_requests.schemas import BlankRequestCreate
+from app.modules.blank_requests.schemas import (
+    BlankRequestCancel,
+    BlankRequestCreate,
+    BlankRequestUpdate,
+)
 from app.modules.blank_requests.service import (
     BlankRequestManagementError,
+    ConcurrentBlankRequestChange,
+    cancel_blank_request,
     create_blank_request,
     request_resources,
+    update_blank_request,
 )
 from app.modules.employees.models import Employee
 from app.modules.orders.schemas import OrderCreate
@@ -221,6 +228,134 @@ def test_request_rejects_inactive_schedule_wrong_group_or_nonoperator() -> None:
                 actor.id,
                 today=date(2026, 11, 5),
             )
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_update_request_uses_version_reason_and_audits_old_and_new_values() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
+        old_version = request.version
+        updated = update_blank_request(
+            db,
+            request.id,
+            BlankRequestUpdate(
+                blank_quantity=75,
+                machine_group_id=fixtures["group"].id,
+                machine_pair_ids=[fixtures["pair"].id],
+                operator_ids=[fixtures["operator"].id],
+                reason="Sửa theo phiếu giấy đã hiệu chỉnh",
+                version=old_version,
+            ),
+            actor.id,
+            "data_entry",
+        )
+        audit = db.scalar(
+            select(AuditLog)
+            .where(AuditLog.table_name == "blank_requests", AuditLog.record_id == request.id)
+            .order_by(AuditLog.id.desc())
+        )
+
+        assert updated.blank_quantity == 75
+        assert updated.version == old_version + 1
+        assert audit.old_values["blank_quantity"] == 50
+        assert audit.new_values["blank_quantity"] == 75
+        assert audit.reason == "Sửa theo phiếu giấy đã hiệu chỉnh"
+        with pytest.raises(ConcurrentBlankRequestChange, match="tải lại"):
+            update_blank_request(
+                db,
+                request.id,
+                BlankRequestUpdate(
+                    blank_quantity=80,
+                    machine_group_id=fixtures["group"].id,
+                    machine_pair_ids=[fixtures["pair"].id],
+                    operator_ids=[fixtures["operator"].id],
+                    reason="Sửa lần hai",
+                    version=old_version,
+                ),
+                actor.id,
+                "data_entry",
+            )
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_only_admin_can_edit_delivered_request_and_cannot_cancel_it() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
+        request.status = "delivered"
+        update_blank_request(
+            db,
+            request.id,
+            BlankRequestUpdate(
+                blank_quantity=55,
+                machine_group_id=fixtures["group"].id,
+                machine_pair_ids=[fixtures["pair"].id],
+                operator_ids=[fixtures["operator"].id],
+                reason="Admin sửa sau khi giao",
+                version=request.version,
+            ),
+            actor.id,
+            "admin",
+        )
+        with pytest.raises(BlankRequestManagementError, match="chỉ Admin"):
+            update_blank_request(
+                db,
+                request.id,
+                BlankRequestUpdate(
+                    blank_quantity=60,
+                    machine_group_id=fixtures["group"].id,
+                    machine_pair_ids=[fixtures["pair"].id],
+                    operator_ids=[fixtures["operator"].id],
+                    reason="Nhập liệu sửa",
+                    version=request.version,
+                ),
+                actor.id,
+                "data_entry",
+            )
+        with pytest.raises(BlankRequestManagementError, match="Chỉ hủy được"):
+            cancel_blank_request(db, request.id, "Không còn nhu cầu", request.version, actor.id)
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_cancel_request_requires_reason_and_sets_terminal_status() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
+        cancelled = cancel_blank_request(
+            db, request.id, "Kế hoạch hủy theo giấy", request.version, actor.id
+        )
+        audit = db.scalar(
+            select(AuditLog)
+            .where(AuditLog.table_name == "blank_requests", AuditLog.record_id == request.id)
+            .order_by(AuditLog.id.desc())
+        )
+
+        assert cancelled.status == "cancelled"
+        assert cancelled.version == 2
+        assert audit.action == "cancel"
+        assert audit.old_values["status"] == "submitted"
+        assert audit.new_values["status"] == "cancelled"
+        assert audit.reason == "Kế hoạch hủy theo giấy"
+        with pytest.raises(ValidationError):
+            BlankRequestCancel(reason="  ", version=cancelled.version)
+        with pytest.raises(BlankRequestManagementError, match="đang chờ"):
+            cancel_blank_request(db, request.id, "Hủy tiếp", cancelled.version, actor.id)
     finally:
         db.rollback()
         db.close()

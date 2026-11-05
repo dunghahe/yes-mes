@@ -586,6 +586,14 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
         must_change_password=False,
         password_changed_at=now,
     )
+    data_entry = User(
+        username=f"data-entry-request-{uuid4().hex}",
+        display_name="Nhập liệu sửa yêu cầu",
+        password_hash=hash_password("MatKhauHopLe-123"),
+        role="data_entry",
+        must_change_password=False,
+        password_changed_at=now,
+    )
     product = Product(
         code=f"BR-{uuid4().hex}",
         name="Sản phẩm yêu cầu",
@@ -607,7 +615,9 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
     operator = Employee(
         code=f"NV-{uuid4().hex}", name="Vận hành YC", employee_type="operator", is_active=True
     )
-    db.add_all([engineering, warehouse, product, shift, group, machine_1, machine_2, operator])
+    db.add_all(
+        [engineering, warehouse, data_entry, product, shift, group, machine_1, machine_2, operator]
+    )
     db.flush()
     pair = MachinePair(
         machine_1_id=min(machine_1.id, machine_2.id),
@@ -696,6 +706,50 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 db.query(BlankRequestOperator).filter_by(blank_request_id=blank_request.id).count()
                 == 1
             )
+
+        with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', login_page.text).group(1)
+            login = client.post(
+                "/auth/login",
+                data={
+                    "username": data_entry.username,
+                    "password": "MatKhauHopLe-123",
+                    "csrf_token": csrf,
+                },
+            )
+            assert login.status_code == 303
+            edit_page = client.get(f"/blank-requests/{blank_request.id}")
+            assert edit_page.status_code == 200
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', edit_page.text).group(1)
+            updated = client.post(
+                f"/blank-requests/{blank_request.id}",
+                data={
+                    "csrf_token": csrf,
+                    "version": blank_request.version,
+                    "blank_quantity": 35,
+                    "machine_group_id": group.id,
+                    "machine_pair_ids": [pair.id],
+                    "operator_ids": [operator.id],
+                    "reason": "Sửa theo giấy mới",
+                },
+            )
+            assert updated.status_code == 303
+            assert blank_request.blank_quantity == 35
+            assert blank_request.version == 2
+            cancel_page = client.get(f"/blank-requests/{blank_request.id}")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', cancel_page.text).group(1)
+            cancelled = client.post(
+                f"/blank-requests/{blank_request.id}/cancel",
+                data={
+                    "csrf_token": csrf,
+                    "version": blank_request.version,
+                    "reason": "Kế hoạch xác nhận hủy",
+                },
+            )
+            assert cancelled.status_code == 303
+            assert blank_request.status == "cancelled"
+            assert client.get(f"/blank-requests/{blank_request.id}").status_code == 403
 
         with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
             login_page = client.get("/auth/login")

@@ -69,7 +69,7 @@
     <h2>Danh sách yêu cầu</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Mã yêu cầu</th><th>Ngày lịch</th><th>PO</th><th>Mã hàng</th><th>Số lượng</th><th>Nhóm máy</th><th>Cặp</th><th>Người vận hành</th><th>Trạng thái</th></tr></thead>
+        <thead><tr><th>Mã yêu cầu</th><th>Ngày lịch</th><th>PO</th><th>Mã hàng</th><th>Số lượng</th><th>Nhóm máy</th><th>Cặp</th><th>Người vận hành</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>
           {% for blank_request, schedule, order, product, shift, group in requests %}
             {% set pair_ids, operator_ids = request_resources[blank_request.id] %}
@@ -78,8 +78,9 @@
               <td>{{ order.po_no }}</td><td>{{ product.code }}</td><td>{{ blank_request.blank_quantity }}</td>
               <td>{{ group.code }} · {{ group.name }}</td><td>{{ pair_ids|length }}</td><td>{{ operator_ids|length }}</td>
               <td>{{ status_labels[blank_request.status] }}</td>
+              <td>{% if can_edit and (blank_request.status == "submitted" or (actor_role == "admin" and blank_request.status == "delivered")) %}<a href="/blank-requests/{{ blank_request.id }}">Mở</a>{% endif %}</td>
             </tr>
-          {% else %}<tr><td colspan="9">Chưa có yêu cầu phôi.</td></tr>{% endfor %}
+          {% else %}<tr><td colspan="10">Chưa có yêu cầu phôi.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
