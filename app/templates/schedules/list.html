@@ -93,6 +93,7 @@
                   <strong>{{ order.po_no }}</strong>
                   <span>{{ shift.name }} · {{ item.planned_quantity }} sp</span>
                   {% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa</a>{% endif %}
+                  {% if can_create_request %}<a href="/blank-requests/new?schedule_id={{ item.id }}">Tạo yêu cầu phôi</a>{% endif %}
                 </article>
               {% endfor %}
             </section>
@@ -109,6 +110,7 @@
                 <strong>{{ order.po_no }}</strong>
                 <span>{{ shift.name }} · {{ item.planned_quantity }} sp</span>
                 {% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa</a>{% endif %}
+                {% if can_create_request %}<a href="/blank-requests/new?schedule_id={{ item.id }}">Tạo yêu cầu phôi</a>{% endif %}
               </article>
             {% else %}<p class="helper-text">Chưa xếp lịch</p>{% endfor %}
           </section>
@@ -121,6 +123,7 @@
             <strong>{{ order.po_no }} · {{ product.code }}</strong>
             <span>{{ shift.name }} · {{ item.planned_quantity }} sản phẩm kế hoạch</span>
             {% if can_edit %}<a href="/schedules/{{ item.id }}">Sửa lịch</a>{% endif %}
+            {% if can_create_request %}<a href="/blank-requests/new?schedule_id={{ item.id }}">Tạo yêu cầu phôi</a>{% endif %}
           </article>
         {% else %}<p>Ngày này chưa có lịch sản xuất.</p>{% endfor %}
       </div>

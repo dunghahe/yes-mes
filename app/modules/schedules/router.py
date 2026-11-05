@@ -104,6 +104,7 @@ def _render(
             "schedule": schedule,
             "can_create": actor is not None and _can_schedule_action(db, actor, "create"),
             "can_edit": actor is not None and _can_schedule_action(db, actor, "edit"),
+            "can_create_request": actor is not None and _can_request_action(db, actor),
             "submitted": submitted or {},
             "errors": errors or {},
             "error": error,
@@ -167,6 +168,20 @@ def _can_schedule_action(db: Session, actor: User, action: str) -> bool:
         if allowed
     )
     return has_permission(actor.role, "schedules", action, extras)
+
+
+def _can_request_action(db: Session, actor: User) -> bool:
+    extras = frozenset(
+        (permission.module, "create")
+        for permission in db.scalars(
+            select(UserPermission).where(
+                UserPermission.user_id == actor.id,
+                UserPermission.deleted_at.is_(None),
+            )
+        )
+        if permission.can_create
+    )
+    return has_permission(actor.role, "blank_requests", "create", extras)
 
 
 def _schema_errors(error: ValidationError) -> dict[str, str]:

@@ -1,6 +1,6 @@
 import re
 from collections.abc import Generator
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.db import engine, get_db
 from app.main import app
-from app.modules.assets.models import Machine, MachineGroup, MachinePair
+from app.modules.assets.models import Machine, MachineGroup, MachineGroupAssignment, MachinePair
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
+from app.modules.blank_requests.models import BlankRequest, BlankRequestOperator, BlankRequestPair
 from app.modules.defects.models import DefectCode
 from app.modules.downtime.models import DowntimeReason
 from app.modules.employees.models import Employee
@@ -562,3 +563,156 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
         outer_transaction.rollback()
         connection.close()
         get_settings.cache_clear()
+
+
+def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+    db = Session(bind=connection, join_transaction_mode="create_savepoint")
+    now = datetime.now(UTC)
+    engineering = User(
+        username=f"engineering-request-{uuid4().hex}",
+        display_name="Kỹ thuật yêu cầu",
+        password_hash=hash_password("MatKhauHopLe-123"),
+        role="engineering",
+        must_change_password=False,
+        password_changed_at=now,
+    )
+    warehouse = User(
+        username=f"warehouse-request-{uuid4().hex}",
+        display_name="Kho xem yêu cầu",
+        password_hash=hash_password("MatKhauHopLe-123"),
+        role="warehouse",
+        must_change_password=False,
+        password_changed_at=now,
+    )
+    product = Product(
+        code=f"BR-{uuid4().hex}",
+        name="Sản phẩm yêu cầu",
+        cycle_time_seconds=3,
+        default_process_type="FULL",
+        is_active=True,
+    )
+    shift = Shift(
+        name=f"Kíp YC {uuid4().hex}",
+        start_time=time(7),
+        end_time=time(15),
+        planned_break_minutes=30,
+        crosses_midnight=False,
+        is_active=True,
+    )
+    group = MachineGroup(code=f"G-{uuid4().hex}", name="Nhóm YC", is_active=True)
+    machine_1 = Machine(code=f"M1-{uuid4().hex[:8]}", name="Máy YC 1", production_area="Khu A")
+    machine_2 = Machine(code=f"M2-{uuid4().hex[:8]}", name="Máy YC 2", production_area="Khu A")
+    operator = Employee(
+        code=f"NV-{uuid4().hex}", name="Vận hành YC", employee_type="operator", is_active=True
+    )
+    db.add_all([engineering, warehouse, product, shift, group, machine_1, machine_2, operator])
+    db.flush()
+    pair = MachinePair(
+        machine_1_id=min(machine_1.id, machine_2.id),
+        machine_2_id=max(machine_1.id, machine_2.id),
+        is_active=True,
+    )
+    db.add(pair)
+    db.flush()
+    db.add(
+        MachineGroupAssignment(
+            machine_pair_id=pair.id,
+            machine_group_id=group.id,
+            valid_from=now - timedelta(days=1),
+            created_by=engineering.id,
+            updated_by=engineering.id,
+        )
+    )
+    order = ProductionOrder(
+        po_no=f"PO-{uuid4().hex}",
+        product_id=product.id,
+        ordered_quantity=50,
+        process_type="FULL",
+        raw_material_code="RM-01",
+        drawing_number="DWG-01",
+        revision="A",
+        material="Thép",
+        blank_size="10x20",
+        order_received_date=now.date(),
+        created_by=engineering.id,
+        updated_by=engineering.id,
+    )
+    db.add(order)
+    db.flush()
+    schedule = ProductionSchedule(
+        production_date=now.date(),
+        shift_id=shift.id,
+        order_id=order.id,
+        planned_quantity=50,
+        created_by=engineering.id,
+        updated_by=engineering.id,
+    )
+    db.add(schedule)
+    db.flush()
+
+    def override_db() -> Generator[Session, None, None]:
+        yield db
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', login_page.text).group(1)
+            login = client.post(
+                "/auth/login",
+                data={
+                    "username": engineering.username,
+                    "password": "MatKhauHopLe-123",
+                    "csrf_token": csrf,
+                },
+            )
+            assert login.status_code == 303
+            request_page = client.get(
+                f"/blank-requests/new?schedule_id={schedule.id}&machine_group_id={group.id}"
+            )
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', request_page.text).group(1)
+            assert machine_1.code in request_page.text
+            created = client.post(
+                "/blank-requests",
+                data={
+                    "csrf_token": csrf,
+                    "schedule_id": schedule.id,
+                    "blank_quantity": 40,
+                    "machine_group_id": group.id,
+                    "machine_pair_ids": [pair.id],
+                    "operator_ids": [operator.id],
+                },
+            )
+            assert created.status_code == 303
+            blank_request = db.query(BlankRequest).one()
+            assert blank_request.status == "submitted"
+            assert re.fullmatch(r"YC-\d{6}-01", blank_request.req_no)
+            assert (
+                db.query(BlankRequestPair).filter_by(blank_request_id=blank_request.id).count() == 1
+            )
+            assert (
+                db.query(BlankRequestOperator).filter_by(blank_request_id=blank_request.id).count()
+                == 1
+            )
+
+        with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'name="csrf_token" value="([^\"]+)"', login_page.text).group(1)
+            login = client.post(
+                "/auth/login",
+                data={
+                    "username": warehouse.username,
+                    "password": "MatKhauHopLe-123",
+                    "csrf_token": csrf,
+                },
+            )
+            assert login.status_code == 303
+            assert client.get("/blank-requests").status_code == 200
+            assert client.get("/blank-requests/new").status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        db.close()
+        outer_transaction.rollback()
+        connection.close()

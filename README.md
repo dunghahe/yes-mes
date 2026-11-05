@@ -35,5 +35,6 @@ Hướng dẫn quản lý lý do dừng máy: `docs/downtime-usage.md`.
 Hướng dẫn quản lý kíp: `docs/shifts-usage.md`.
 Hướng dẫn tạo và sửa PO: `docs/orders-usage.md`.
 Hướng dẫn lập lịch sản xuất: `docs/schedules-usage.md`.
+Hướng dẫn tạo yêu cầu xuất phôi: `docs/blank-requests-usage.md`.
 
 Không chạy `docker compose down -v` trên môi trường có dữ liệu cần giữ.
