@@ -1,9 +1,6 @@
 from decimal import Decimal
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
-ProcessType = Literal["FULL", "SX_ONLY", "BAVIA_ONLY"]
 
 
 class ProductCreate(BaseModel):
@@ -12,7 +9,6 @@ class ProductCreate(BaseModel):
     code: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=200)
     cycle_time_seconds: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
-    default_process_type: ProcessType
 
 
 class ProductUpdate(ProductCreate):

@@ -1,26 +1,79 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="data-panel" aria-labelledby="page-title">
+  <section class="data-panel" aria-labelledby="page-title" x-data="{ openCreate: {{ 'true' if open_create else 'false' }}, openImport: {{ 'true' if open_import else 'false' }} }">
     <p class="eyebrow">Kế hoạch sản xuất</p>
     <h1 id="page-title">Danh sách PO</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
     <div class="toolbar">
-      {% if can_create %}<a class="primary-button button-link" href="/orders/new">Tạo PO</a>{% endif %}
-      <a class="secondary-button button-link" href="/">Về trang chủ</a>
+      {% if can_create %}<button class="primary-button" type="button" @click="openCreate=true">Tạo PO</button><button class="secondary-button" type="button" @click="openImport=true">Nhập Excel</button><a class="secondary-button button-link" href="/orders/import/template">Tải file mẫu</a>{% endif %}
     </div>
     <div class="table-wrap">
+      {% set columns = namespace(show_bavia=false) %}
+      {% for order, product in orders %}{% if order.process_type in ('FULL', 'BAVIA_ONLY') %}{% set columns.show_bavia = true %}{% endif %}{% endfor %}
       <table>
-        <thead><tr><th>Số PO</th><th>Mã hàng</th><th>Tên hàng</th><th>Số lượng đặt</th><th>Công đoạn</th><th>Trạng thái</th><th></th></tr></thead>
+        <thead><tr><th>Số PO</th><th>Mã hàng</th><th>Tên hàng</th><th>Đặt</th><th>SL SX</th>{% if columns.show_bavia %}<th>SL Bavia</th>{% endif %}<th>QC OK</th><th>QC NG</th><th>Công đoạn</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>
           {% for order, product in orders %}
+            {% set progress = order_progress.get(order.id, {}) %}
             <tr>
               <td>{{ order.po_no }}</td><td>{{ product.code }}</td><td>{{ product.name }}</td>
-              <td>{{ order.ordered_quantity }}</td><td>{{ process_labels[order.process_type] }}</td><td>Đang mở</td>
+              <td>{{ order.ordered_quantity }}</td>
+              <td>{{ progress.get('production', 0) if progress.get('production') is not none else '—' }}</td>
+              {% if columns.show_bavia %}<td>{{ progress.get('bavia', 0) if order.process_type in ('FULL', 'BAVIA_ONLY') else '—' }}</td>{% endif %}
+              <td>{{ progress.get('qc_ok', 0) if progress.get('qc_ok') is not none else '—' }}</td>
+              <td>{{ progress.get('qc_ng', 0) if progress.get('qc_ng') is not none else '—' }}</td>
+              <td>{{ process_labels[order.process_type] }}</td><td>{{ order_status_labels[order.status] }}</td>
               <td>{% if can_edit %}<a href="/orders/{{ order.id }}">Mở</a>{% endif %}</td>
             </tr>
-          {% else %}<tr><td colspan="7">Chưa có PO.</td></tr>{% endfor %}
+          {% else %}<tr><td colspan="{{ 11 if columns.show_bavia else 10 }}">Chưa có PO.</td></tr>{% endfor %}
         </tbody>
       </table>
+    </div>
+    {% if page_count is defined and page_count > 1 %}<nav class="pagination" aria-label="Trang PO">
+      {% if page > 1 %}<a class="secondary-button button-link" href="/orders?page={{ page - 1 }}">Trước</a>{% endif %}
+      <span>Trang {{ page }} / {{ page_count }}</span>
+      {% if page < page_count %}<a class="secondary-button button-link" href="/orders?page={{ page + 1 }}">Sau</a>{% endif %}
+    </nav>{% endif %}
+
+    <div x-cloak x-show="openCreate" @keydown.escape.window="openCreate=false" @click.self="openCreate=false" class="modal-backdrop">
+      <section class="modal-panel order-modal" role="dialog" aria-modal="true" aria-labelledby="order-create-title">
+        <header class="modal-header"><h2 id="order-create-title">Tạo PO</h2><button type="button" @click="openCreate=false" aria-label="Đóng">×</button></header>
+        <form method="post" action="/orders" class="form-stack modal-form order-create-form" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+          <div class="order-create-grid">
+            <section class="order-form-section"><h3>Thông tin PO</h3><div class="order-field-grid">
+              <div><label for="po-no">Số PO</label><input id="po-no" name="po_no" maxlength="100" required value="{{ submitted.get('po_no', '') }}" aria-invalid="{{ 'true' if errors.get('po_no') else 'false' }}" aria-describedby="po-no-error">{% if errors.get('po_no') %}<p id="po-no-error" class="field-error">{{ errors.get('po_no') }}</p>{% endif %}</div>
+              <div><label for="product-id">Mã hàng</label><select id="product-id" name="product_id" required data-searchable-select data-autocomplete-label="Mã hàng" data-autocomplete-placeholder="Gõ mã hàng để tìm…" aria-describedby="product-error"><option value="">-- Chọn mã hàng --</option>{% for item in products %}<option value="{{ item.id }}" {% if submitted.get('product_id', '')|string == item.id|string %}selected{% endif %}>{{ item.code }} · {{ item.name }}</option>{% endfor %}</select>{% if errors.get('product_id') %}<p id="product-error" class="field-error">{{ errors.get('product_id') }}</p>{% endif %}</div>
+              <div><label for="order-quantity">Số lượng đặt</label><input id="order-quantity" name="ordered_quantity" type="number" min="1" step="1" required value="{{ submitted.get('ordered_quantity', '') }}" aria-describedby="quantity-error">{% if errors.get('ordered_quantity') %}<p id="quantity-error" class="field-error">{{ errors.get('ordered_quantity') }}</p>{% endif %}</div>
+              <div><label for="lot-size">Số lượng mỗi lô</label><input id="lot-size" name="lot_size" type="number" min="1" step="1" required value="{{ submitted.get('lot_size', '') }}" aria-describedby="lot-size-error">{% if errors.get('lot_size') %}<p id="lot-size-error" class="field-error">{{ errors.get('lot_size') }}</p>{% endif %}</div>
+              <div class="lot-count-preview" data-lot-preview data-quantity-id="order-quantity" data-size-id="lot-size" aria-live="polite" hidden><strong data-lot-count></strong><span data-lot-breakdown></span></div>
+              <div><label for="process-type">Công đoạn</label><select id="process-type" name="process_type" required aria-describedby="process-error"><option value="">-- Chọn công đoạn --</option>{% for process in process_types %}<option value="{{ process }}" {% if submitted.get('process_type', '') == process %}selected{% endif %}>{{ process_labels[process] }}</option>{% endfor %}</select>{% if errors.get('process_type') %}<p id="process-error" class="field-error">{{ errors.get('process_type') }}</p>{% endif %}</div>
+            </div></section>
+            <section class="order-form-section"><h3>Thông tin kho nguyên vật liệu</h3><div class="order-field-grid">
+              {% for name, label, errkey in [('raw_material_code','Mã nguyên vật liệu','raw_material_code'),('drawing_number','Mã bản vẽ','drawing_number'),('revision','REV','revision'),('material','Chất liệu','material'),('blank_size','Kích cỡ phôi','blank_size')] %}
+                <div><label for="{{ name }}">{{ label }}</label><input id="{{ name }}" name="{{ name }}" maxlength="{{ 30 if name == 'revision' else 100 }}" required value="{{ submitted.get(name, '') }}" aria-describedby="{{ name }}-error">{% if errors.get(errkey) %}<p id="{{ name }}-error" class="field-error">{{ errors.get(errkey) }}</p>{% endif %}</div>
+              {% endfor %}
+              <div><label for="received-date">Ngày nhận đơn</label><input id="received-date" name="order_received_date" type="date" required value="{{ submitted.get('order_received_date', '') }}" aria-describedby="received-date-error">{% if errors.get('order_received_date') %}<p id="received-date-error" class="field-error">{{ errors.get('order_received_date') }}</p>{% endif %}</div>
+            </div></section>
+            <div class="order-notes-field"><label for="order-notes">Ghi chú</label><textarea id="order-notes" name="notes" maxlength="2000" rows="2">{{ submitted.get('notes', '') }}</textarea></div>
+          </div>
+          <div class="modal-actions"><button class="primary-button" type="submit">Lưu PO</button><button class="secondary-button" type="button" @click="openCreate=false">Hủy</button></div>
+        </form>
+      </section>
+    </div>
+
+    <div x-cloak x-show="openImport" @keydown.escape.window="openImport=false" @click.self="openImport=false" class="modal-backdrop">
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="order-import-title">
+        <header class="modal-header"><h2 id="order-import-title">Nhập PO từ Excel</h2><button type="button" @click="openImport=false" aria-label="Đóng">×</button></header>
+        <form action="/orders/import/preview" method="post" enctype="multipart/form-data" class="form-stack modal-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="order-import-file">Chọn file .xlsx</label><input id="order-import-file" name="upload" type="file" accept=".xlsx" required>
+          <a href="/orders/import/template">Tải file mẫu</a>
+          <div class="modal-actions"><button class="primary-button" type="submit">Kiểm tra file</button><button class="secondary-button" type="button" @click="openImport=false">Hủy</button></div>
+        </form>
+      </section>
     </div>
   </section>
 {% endblock %}

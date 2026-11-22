@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel qc-lot-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Kiểm tra chất lượng</p>
+    <h1 id="page-title">QC theo lô</h1>
+    {% if saved %}<p class="success-message" role="status">Đã lưu kết quả QC.</p>{% endif %}
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+
+    <div class="entry-workbench">
+      <aside class="record-search-panel" aria-label="Tìm lô cần kiểm">
+        <h2>Tìm lô</h2>
+        <form method="get" action="/qc" class="form-stack">
+          <label for="po-search">PO</label>
+          <div class="lookup-row">
+            <div class="suggestion-input-wrap">
+              <input id="po-search" name="po_query" value="{{ po_query }}" placeholder="Nhập mã PO" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="qc-po-suggestions" data-search-suggest="po">
+              <div id="qc-po-suggestions" class="search-suggestions" role="listbox" aria-label="Gợi ý PO" hidden></div>
+            </div>
+            <button class="secondary-button" type="submit">Tìm</button>
+          </div>
+        </form>
+        <form method="get" action="/qc" class="form-stack qc-direct-lot-search">
+          <label for="lot-code-search">Quét mã lô</label>
+          <div class="lookup-row">
+            <div class="suggestion-input-wrap">
+              <input id="lot-code-search" name="lot_code" value="{{ lot_code }}" placeholder="Quét hoặc nhập mã lô" autocomplete="off" autocapitalize="characters" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="qc-lot-suggestions" data-search-suggest="lot" required>
+              <div id="qc-lot-suggestions" class="search-suggestions" role="listbox" aria-label="Gợi ý mã lô" hidden></div>
+            </div>
+            <button class="primary-button" type="submit">Mở lô</button>
+          </div>
+        </form>
+        {% if lot_code and not lot %}<p class="field-error" role="alert">Không tìm thấy mã lô đang hoạt động.</p>{% endif %}
+        <div class="record-result-list">
+          {% for item in qc_lots %}
+            {% set row_lot, row_order, row_product, row_inspection = item.lot, item.order, item.product, item.inspection %}
+            <a class="record-result-card {% if lot and lot.id == row_lot.id %}is-selected{% endif %}" href="/qc?lot_code={{ row_lot.lot_code }}&amp;po_query={{ po_query|urlencode }}" {% if lot and lot.id == row_lot.id %}aria-current="true"{% endif %}>
+              <span><strong>{{ row_lot.lot_code }}</strong><small>PO {{ row_order.po_no }} · {{ row_lot.quantity }} con</small></span>
+              <span class="record-status {% if row_inspection %}is-done{% else %}is-pending{% endif %}">{{ 'Đã QC' if row_inspection else 'Chưa QC' }}</span>
+            </a>
+          {% else %}
+            {% if po_query %}<p class="helper-text">Không có lô phù hợp.</p>{% else %}<p class="helper-text">Nhập PO để tìm các lô đã in.</p>{% endif %}
+          {% endfor %}
+        </div>
+      </aside>
+
+      <div class="record-entry-panel">
+      {% if lot %}
+        <section class="qc-lot-summary" aria-label="Thông tin lô">
+          <div><span>Mã lô</span><strong>{{ lot.lot_code }}</strong></div>
+          <div><span>PO</span><strong>{{ order.po_no }}</strong></div>
+          <div><span>Mã hàng</span><strong>{{ product.code }} · {{ product.name }}</strong></div>
+          <div><span>Số lượng lô</span><strong>{{ lot.quantity }}</strong></div>
+        </section>
+        {% if inspection %}<p class="notice">Lô đã QC · có thể mở lại để cập nhật.</p>{% endif %}
+
+        <form method="post" action="/qc" class="form-stack qc-lot-form" data-lot-qc-form>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="lot_code" value="{{ lot.lot_code }}">
+          <input type="hidden" name="po_query" value="{{ po_query }}">
+          <input type="hidden" name="version" value="{{ inspection.version if inspection else 0 }}">
+          <div class="qc-lot-meta">
+            <label for="qc-date">Ngày kiểm<input id="qc-date" name="inspected_date" type="date" value="{{ submitted.get('inspected_date', inspection.inspected_date.isoformat() if inspection else today) }}" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}></label>
+            <label for="qc-shift">Kíp kiểm<select id="qc-shift" name="shift_id" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}>
+              <option value="">-- Chọn kíp --</option>{% for shift in shifts %}<option value="{{ shift.id }}" {% if submitted.get('shift_id', inspection.shift_id if inspection else '')|string == shift.id|string %}selected{% endif %}>{{ shift.name }} · {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}</option>{% endfor %}
+            </select></label>
+            <label for="qc-employee">Người QC<select id="qc-employee" name="qc_employee_id" data-employee-autocomplete required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}>
+              <option value="">-- Chọn người QC --</option>{% for employee in employees %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if submitted.get('qc_employee_id', inspection.qc_employee_id if inspection else '')|string == employee.id|string %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}
+            </select></label>
+          </div>
+
+          <section class="qc-lot-counts" aria-labelledby="qc-count-title">
+            <h2 id="qc-count-title">Kết quả lô</h2>
+            {% set total_ng = submitted.get('quantity_ng', (inspection.ng_scrap + inspection.ng_repair) if inspection else '') %}
+            <div class="qc-count-grid qc-count-grid-simple">
+              <div><span>Số lượng lô</span><strong>{{ lot.quantity }}</strong></div>
+              <label for="quantity-ok">OK<input id="quantity-ok" name="quantity_ok" data-qc-ok type="number" min="0" step="1" value="{{ submitted.get('quantity_ok', inspection.quantity_ok if inspection else '') }}" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}></label>
+              <label for="quantity-ng">NG<input id="quantity-ng" name="quantity_ng" data-qc-ng type="number" min="0" step="1" value="{{ total_ng }}" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}></label>
+            </div>
+            <p class="qc-balance" data-lot-qc-balance data-quantity-in="{{ lot.quantity }}">Nhập OK và tổng NG để kiểm tra tổng.</p>
+          </section>
+
+          {% set show_defects = (inspection and (inspection.ng_scrap or inspection.ng_repair)) or (submitted and (submitted.get('quantity_ng', '0')|int > 0)) %}
+          <fieldset class="qc-defect-fieldset" data-defect-section data-readonly="{{ 'true' if (inspection and not can_edit) or (not inspection and not can_create) else 'false' }}" {% if not show_defects %}hidden{% endif %}>
+            <legend>Chi tiết NG</legend>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Dạng lỗi</th><th>Máy</th><th>Kết quả</th><th>Số lượng</th><th></th></tr></thead>
+              <tbody data-defect-list>
+                {% for row in detail_rows %}
+                  <tr class="qc-defect-row">
+                    <td><select name="defect_code_id" aria-label="Dạng lỗi" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}><option value="">-- Chọn lỗi --</option>{% for defect in defects %}<option value="{{ defect.id }}" {% if row.get('defect_code_id')|string == defect.id|string %}selected{% endif %}>{{ defect.code }} · {{ defect.name }}</option>{% endfor %}</select></td>
+                    <td><select name="machine_id" aria-label="Máy gây lỗi" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}><option value="">-- Chọn máy --</option>{% for machine in machines %}<option value="{{ machine.id }}" {% if row.get('machine_id')|string == machine.id|string %}selected{% endif %}>{{ machine.code }}</option>{% endfor %}</select></td>
+                    <td><select name="disposition" aria-label="Kết quả lỗi" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}><option value="">-- Chọn --</option><option value="scrap" {% if row.get('disposition') == 'scrap' %}selected{% endif %}>NG hủy</option><option value="repair" {% if row.get('disposition') == 'repair' %}selected{% endif %}>NG sửa</option></select></td>
+                    <td><input name="defect_quantity" aria-label="Số lượng lỗi" type="number" min="1" step="1" value="{{ row.get('quantity', '') }}" required {% if inspection and not can_edit %}disabled{% elif not inspection and not can_create %}disabled{% endif %}></td>
+                    <td>{% if not (inspection and not can_edit) and not (not inspection and not can_create) %}<button class="secondary-button" type="button" data-remove-defect aria-label="Xóa dòng">Xóa</button>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table></div>
+            {% if can_create or can_edit %}<button class="secondary-button" type="button" data-add-defect>Thêm dạng lỗi</button>{% endif %}
+            <template data-defect-template><tr class="qc-defect-row">
+              <td><select name="defect_code_id" aria-label="Dạng lỗi" required><option value="">-- Chọn lỗi --</option>{% for defect in defects %}<option value="{{ defect.id }}">{{ defect.code }} · {{ defect.name }}</option>{% endfor %}</select></td>
+              <td><select name="machine_id" aria-label="Máy gây lỗi" required><option value="">-- Chọn máy --</option>{% for machine in machines %}<option value="{{ machine.id }}">{{ machine.code }}</option>{% endfor %}</select></td>
+              <td><select name="disposition" aria-label="Kết quả lỗi" required><option value="">-- Chọn --</option><option value="scrap">NG hủy</option><option value="repair">NG sửa</option></select></td>
+              <td><input name="defect_quantity" aria-label="Số lượng lỗi" type="number" min="1" step="1" required></td>
+              <td><button class="secondary-button" type="button" data-remove-defect aria-label="Xóa dòng">Xóa</button></td>
+            </tr></template>
+          </fieldset>
+          {% if can_edit or (not inspection and can_create) %}<button class="primary-button" type="submit">Lưu kết quả QC</button>{% else %}<p class="helper-text">Tài khoản chỉ có quyền xem kết quả.</p>{% endif %}
+        </form>
+      {% else %}
+        <div class="record-entry-empty"><h2>Chọn lô để nhập QC</h2><p>Tìm theo PO hoặc quét mã lô.</p></div>
+      {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='js/qc-lots.js').path }}?v=20261123-1" defer></script>{% endblock %}

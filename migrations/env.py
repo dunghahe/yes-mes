@@ -8,12 +8,18 @@ from app.core.db import Base
 from app.modules.assets import models as asset_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.blank_requests import models as blank_request_models  # noqa: F401
+from app.modules.daily_reports import models as daily_report_models  # noqa: F401
 from app.modules.defects import models as defect_models  # noqa: F401
 from app.modules.downtime import models as downtime_models  # noqa: F401
 from app.modules.employees import models as employee_models  # noqa: F401
+from app.modules.form_templates import models as form_template_models  # noqa: F401
+from app.modules.imports import models as import_models  # noqa: F401
 from app.modules.orders import models as order_models  # noqa: F401
 from app.modules.products import models as product_models  # noqa: F401
+from app.modules.qc import models as qc_models  # noqa: F401
+from app.modules.repairs import models as repair_models  # noqa: F401
 from app.modules.schedules import models as schedule_models  # noqa: F401
+from app.modules.settings import models as setting_models  # noqa: F401
 from app.modules.shifts import models as shift_models  # noqa: F401
 from app.modules.users import models as user_models  # noqa: F401
 

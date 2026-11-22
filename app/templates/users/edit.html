@@ -33,23 +33,22 @@
     <section class="subsection" aria-labelledby="permission-title">
       <h2 id="permission-title">Quyền bổ sung</h2>
       <p class="helper-text">Các quyền này chỉ cộng thêm quyền của vai trò. Khi cấp quyền tạo, sửa hoặc xóa, hãy chọn kèm quyền xem.</p>
-      <div class="permission-list">
+      <form method="post" action="/admin/users/{{ user.id }}/permissions" class="permission-list">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {% for module in modules %}
           {% set permission = permissions.get(module) %}
-          {% set is_submitted_module = permission_form_module is defined and permission_form_module == module %}
-          <form method="post" action="/admin/users/{{ user.id }}/permissions/{{ module }}" class="permission-row">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="version" value="{{ permission.version if permission else 0 }}">
+          {% set submitted_permission = submitted_permissions.get(module, {}) if submitted_permissions is defined else {} %}
+          <div class="permission-row">
+            <input type="hidden" name="perm_{{ module }}_version" value="{{ permission.version if permission else 0 }}">
             <h3>{{ module_labels[module] }}</h3>
-            <label><input type="checkbox" name="can_view" value="true" {% if permission_form_values.can_view if is_submitted_module else (permission and permission.can_view) %}checked{% endif %}> Xem</label>
-            <label><input type="checkbox" name="can_create" value="true" {% if permission_form_values.can_create if is_submitted_module else (permission and permission.can_create) %}checked{% endif %}> Tạo</label>
-            <label><input type="checkbox" name="can_edit" value="true" {% if permission_form_values.can_edit if is_submitted_module else (permission and permission.can_edit) %}checked{% endif %}> Sửa</label>
-            <label><input type="checkbox" name="can_delete" value="true" {% if permission_form_values.can_delete if is_submitted_module else (permission and permission.can_delete) %}checked{% endif %}> Xóa</label>
-            {% if is_submitted_module and permission_form_error %}<p class="field-error" role="alert">{{ permission_form_error }}</p>{% endif %}
-            <button class="secondary-button" type="submit">Lưu quyền</button>
-          </form>
+            <label><input type="checkbox" name="perm_{{ module }}_can_view" value="true" {% if submitted_permission.get('can_view', permission and permission.can_view) %}checked{% endif %}> Xem</label>
+            <label><input type="checkbox" name="perm_{{ module }}_can_create" value="true" {% if submitted_permission.get('can_create', permission and permission.can_create) %}checked{% endif %}> Tạo</label>
+            <label><input type="checkbox" name="perm_{{ module }}_can_edit" value="true" {% if submitted_permission.get('can_edit', permission and permission.can_edit) %}checked{% endif %}> Sửa</label>
+            <label><input type="checkbox" name="perm_{{ module }}_can_delete" value="true" {% if submitted_permission.get('can_delete', permission and permission.can_delete) %}checked{% endif %}> Xóa</label>
+          </div>
         {% endfor %}
-      </div>
+        <button class="primary-button" type="submit">Lưu tất cả quyền</button>
+      </form>
     </section>
 
     <section class="subsection" aria-labelledby="password-title">

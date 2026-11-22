@@ -38,7 +38,6 @@ def _product_create(code: str) -> ProductCreate:
         code=code,
         name="Mã hàng thử nghiệm",
         cycle_time_seconds=Decimal("3.25"),
-        default_process_type="FULL",
     )
 
 
@@ -55,7 +54,6 @@ def test_create_product_persists_data_and_audit() -> None:
         )
 
         assert product.cycle_time_seconds == Decimal("3.250")
-        assert product.default_process_type == "FULL"
         assert product.is_active
         assert audit.actor_id == actor.id
         assert audit.old_values is None
@@ -79,20 +77,14 @@ def test_product_code_must_be_unique() -> None:
         db.close()
 
 
-@pytest.mark.parametrize(
-    ("cycle_time", "process_type"),
-    [("0", "FULL"), ("-1", "FULL"), ("1", "OTHER"), ("1.1234", "FULL")],
-)
-def test_product_rejects_invalid_cycle_time_or_process_type(
-    cycle_time: str, process_type: str
-) -> None:
+@pytest.mark.parametrize("cycle_time", ["0", "-1", "1.1234"])
+def test_product_rejects_invalid_cycle_time(cycle_time: str) -> None:
     with pytest.raises(ValidationError):
         ProductCreate.model_validate(
             {
                 "code": "P-TEST",
                 "name": "Hàng thử",
                 "cycle_time_seconds": cycle_time,
-                "default_process_type": process_type,
             }
         )
 
@@ -111,7 +103,6 @@ def test_update_product_uses_version_audits_and_hides_inactive_items() -> None:
                 code=product.code,
                 name="Tên đã sửa",
                 cycle_time_seconds=Decimal("7.5"),
-                default_process_type="SX_ONLY",
                 is_active=False,
                 version=initial_version,
             ),
@@ -138,7 +129,6 @@ def test_update_product_uses_version_audits_and_hides_inactive_items() -> None:
                     code=product.code,
                     name="Tên cũ",
                     cycle_time_seconds=Decimal("3.25"),
-                    default_process_type="FULL",
                     is_active=True,
                     version=initial_version,
                 ),

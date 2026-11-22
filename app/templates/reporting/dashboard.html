@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel report-dashboard" aria-labelledby="page-title">
+    <p class="eyebrow">Tổng hợp sản xuất</p>
+    <h1 id="page-title">Báo cáo</h1>
+
+    <nav class="report-tabs" aria-label="Loại báo cáo">
+      {% for key, label in [("po-summary", "Tiến độ PO"), ("production", "Sản lượng"), ("ng", "NG"), ("repairs", "Hàng sửa"), ("oee", "OEE")] %}
+        <a href="{{ tab_urls[key] }}" {% if tab == key %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+
+    {% if tab != "po-summary" %}
+      <form method="get" action="/reports" class="report-filter-panel">
+        <input type="hidden" name="tab" value="{{ tab }}">
+        <div class="report-filter-grid">
+          <label>Từ ngày<input type="date" name="date_from" value="{{ date_from }}"></label>
+          <label>Đến ngày<input type="date" name="date_to" value="{{ date_to }}"></label>
+          <label>PO<select name="order_id" data-searchable-select data-autocomplete-label="PO" data-autocomplete-placeholder="Gõ mã PO để tìm…"><option value="">Tất cả PO</option>{% for order in orders %}<option value="{{ order.id }}" {% if order_id == order.id %}selected{% endif %}>{{ order.po_no }}</option>{% endfor %}</select></label>
+          {% if tab in ["production", "ng", "oee"] %}
+            <label>Cặp máy<select name="machine_pair_id" data-searchable-select data-autocomplete-label="Cặp máy" data-autocomplete-placeholder="Gõ mã máy để tìm…"><option value="">Tất cả cặp</option>{% for pair_id, machine_1, machine_2 in machine_pairs %}<option value="{{ pair_id }}" {% if machine_pair_id == pair_id %}selected{% endif %}>{{ machine_1 }} – {{ machine_2 }}</option>{% endfor %}</select></label>
+            <label>Người làm / QC<select name="employee_id" data-searchable-select data-autocomplete-label="Nhân viên" data-autocomplete-placeholder="Gõ tên hoặc mã để tìm…"><option value="">Tất cả nhân viên</option>{% for employee in employees %}<option value="{{ employee.id }}" {% if employee_id == employee.id %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}</select></label>
+          {% endif %}
+          {% if tab == "ng" %}
+            <label>Loại NG<select name="kind"><option value="">Tất cả</option><option value="scrap" {% if kind == "scrap" %}selected{% endif %}>NG hủy</option><option value="repair" {% if kind == "repair" %}selected{% endif %}>NG sửa</option></select></label>
+          {% endif %}
+          {% if tab == "oee" %}
+            <label>Gộp theo<select name="group_by">{% for key, label in [("day", "Ngày"), ("month", "Tháng"), ("order", "PO"), ("product", "Mã hàng"), ("pair", "Cặp máy"), ("shift", "Kíp")] %}<option value="{{ key }}" {% if group_by == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          {% endif %}
+        </div>
+        <div class="report-filter-actions">
+          <button class="primary-button" type="submit">Lọc</button>
+          <a class="secondary-button" href="/reports?tab={{ tab }}">Xóa lọc</a>
+        </div>
+        <nav class="report-presets" aria-label="Khoảng ngày nhanh">
+          <span>Chọn nhanh:</span>
+          <a class="secondary-button" href="{{ preset_urls.today }}" {% if active_preset == "today" %}aria-current="date"{% endif %}>Hôm nay</a>
+          <a class="secondary-button" href="{{ preset_urls.month }}" {% if active_preset == "month" %}aria-current="date"{% endif %}>Tháng này</a>
+          <a class="secondary-button" href="{{ preset_urls.year }}" {% if active_preset == "year" %}aria-current="date"{% endif %}>Năm nay</a>
+        </nav>
+      </form>
+    {% endif %}
+
+    {% if tab == "oee" %}<p class="helper-text">A/P tính theo máy. Q và OEE chỉ hiện khi gộp PO, vì QC được ghi theo lô.</p>{% endif %}
+
+    {% if summary_metrics %}
+      <section class="report-kpis" aria-label="Tổng quan PO">
+        <article><span>Số PO</span><strong>{{ summary_metrics.order_count }}</strong></article>
+        <article><span>Tổng đặt</span><strong>{{ summary_metrics.ordered_quantity }}</strong></article>
+        <article><span>Đã hoàn thành</span><strong>{{ summary_metrics.finished_quantity }}</strong></article>
+        <article><span>Đang chờ sửa</span><strong>{{ summary_metrics.ng_waiting_repair }}</strong></article>
+      </section>
+    {% endif %}
+
+    <div class="report-results-heading">
+      <h2>{% if tab == "po-summary" %}Tiến độ từng PO{% elif tab == "production" %}Sản lượng{% elif tab == "ng" %}Lỗi chất lượng{% elif tab == "repairs" %}Theo dõi sửa{% else %}Hiệu suất thiết bị{% endif %}</h2>
+      <a class="secondary-button" href="{{ export_url }}">Xuất Excel</a>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        {% if tab == "po-summary" %}
+          <thead><tr><th>PO</th><th>Mã hàng</th><th>Công đoạn</th><th>Đặt</th><th>Đã SX</th><th>Bavia</th><th>Đã hoàn thành</th><th>Đang sửa</th><th>Tiến độ</th></tr></thead>
+          <tbody>{% for row in rows %}<tr><td><a class="report-po-link" href="/reports?tab=production&amp;order_id={{ row.order_id }}">{{ row.po_no }}</a></td><td>{{ row.product_code }}</td><td>{{ process_labels[row.process_type] }}</td><td>{{ row.ordered_quantity }}</td><td>{{ row.produced }}</td><td>{{ row.bavia_produced }}</td><td>{{ row.finished_quantity }}</td><td>{{ row.ng_waiting_repair }}</td><td><div class="report-progress"><span>{{ row.progress_percent|round(1) }}%</span><progress class="report-progress-track" max="100" value="{{ [row.progress_percent, 100]|min }}" aria-label="Tiến độ PO {{ row.po_no }}">{{ row.progress_percent|round(1) }}%</progress></div></td></tr>{% else %}<tr><td colspan="9">Chưa có dữ liệu.</td></tr>{% endfor %}</tbody>
+        {% elif tab == "production" %}
+          <thead><tr><th>Ngày</th><th>Kíp</th><th>PO</th><th>Mã hàng</th><th>Công đoạn</th><th>Cặp máy</th><th>Người làm</th><th>Sản lượng</th><th>Ghi dừng</th></tr></thead>
+          <tbody>{% for row in rows %}<tr><td>{{ row.date }}</td><td>{{ row.shift }}</td><td>{{ row.po_no }}</td><td>{{ row.product_code }}</td><td>{% if row.stage == "BAVIA" %}Bavia{% else %}Sản xuất{% endif %}</td><td>{{ row.machine_pair or "—" }}</td><td>{{ row.employee_name }}</td><td>{{ row.quantity_produced }}</td><td>{% if row.downtime_recorded is none %}—{% elif row.downtime_recorded %}Có{% else %}Không{% endif %}</td></tr>{% else %}<tr><td colspan="9">Không có dữ liệu theo bộ lọc.</td></tr>{% endfor %}</tbody>
+        {% elif tab == "ng" %}
+          <thead><tr><th>Ngày</th><th>PO / lô</th><th>Mã hàng</th><th>Công đoạn</th><th>Máy</th><th>Dạng lỗi</th><th>Loại NG</th><th>Số lượng</th><th>QC hoàn tất</th></tr></thead>
+          <tbody>{% for row in rows %}<tr><td>{{ row.date }}</td><td>{{ row.po_no }}{% if row.get("lot_code") %}<br><span class="muted">{{ row.lot_code }}</span>{% endif %}</td><td>{{ row.product_code }}</td><td>{% if row.stage == "QC_BAVIA" %}QC Bavia{% else %}QC sản xuất{% endif %}{% if row.get("is_recheck") %} lại{% endif %}</td><td>{{ row.machine_pair or "—" }}</td><td>{{ row.get("defect_code") or "—" }}</td><td>{% if row.ng_kind == "scrap" %}NG hủy{% else %}NG sửa{% endif %}</td><td>{{ row.quantity }}</td><td>{% if row.qc_complete %}Có{% else %}Chưa{% endif %}</td></tr>{% else %}<tr><td colspan="9">Không có dữ liệu theo bộ lọc.</td></tr>{% endfor %}</tbody>
+        {% elif tab == "repairs" %}
+          <thead><tr><th>Ngày</th><th>Mã phiếu sửa</th><th>PO / lô</th><th>Công đoạn</th><th>Hoạt động</th><th>Người thực hiện</th><th>Số lượng</th><th>Kết quả</th></tr></thead>
+          <tbody>{% for row in rows %}<tr><td>{{ row.date }}</td><td><strong>{{ row.repair_code or "—" }}</strong></td><td>{{ row.po_no }}{% if row.get("lot_code") %}<br><span class="muted">{{ row.lot_code }}</span>{% endif %}</td><td>{% if row.stage == "QC_BAVIA" %}Bavia{% else %}Sản xuất{% endif %}</td><td>{% if row.kind == "repair" %}Mang đi sửa{% else %}QC lại{% endif %}</td><td>{{ row.employee or "—" }}</td><td>{% if row.kind == "repair" %}{{ row.quantity }}{% else %}{{ row.quantity_in }}{% endif %}</td><td>{% if row.kind == "repair" %}—{% else %}OK {{ row.quantity_ok }} · Hủy {{ row.ng_scrap }} · Sửa {{ row.ng_repair }}{% endif %}</td></tr>{% else %}<tr><td colspan="8">Không có dữ liệu theo bộ lọc.</td></tr>{% endfor %}</tbody>
+        {% else %}
+          <thead><tr><th>{{ {"day": "Ngày", "month": "Tháng", "order": "PO", "product": "Mã hàng", "pair": "Cặp máy", "shift": "Kíp"}[group_by] }}</th><th>OEE</th><th>A</th><th>P</th><th>Q</th><th>Sản lượng</th><th>Dừng máy</th><th>Không ghi dừng</th></tr></thead>
+          <tbody>{% for row in rows %}<tr><td><strong>{{ row.group or "—" }}</strong></td><td>{% if row.oee is not none %}{{ (row.oee * 100)|round(1) }}%{% elif not row.quality_scope %}Chỉ tính ở nhóm PO{% else %}Chưa đủ dữ liệu{% endif %}</td><td>{% if row.availability is not none %}{{ (row.availability * 100)|round(1) }}%{% else %}—{% endif %}</td><td>{% if row.performance is not none %}{{ (row.performance * 100)|round(1) }}%{% if row.performance > 1 %} · Cao{% endif %}{% else %}—{% endif %}</td><td>{% if row.quality is not none %}{{ (row.quality * 100)|round(1) }}%{% elif not row.quality_scope %}Chỉ tính ở nhóm PO{% else %}Chưa đủ QC{% endif %}</td><td>{{ row.produced }}</td><td>{{ row.downtime_minutes }} phút</td><td>{{ row.no_downtime_record_count }} / {{ row.pair_shift_count }} ({{ row.no_downtime_record_percent|round(1) }}%)</td></tr>{% else %}<tr><td colspan="8">Không có dữ liệu theo bộ lọc.</td></tr>{% endfor %}</tbody>
+        {% endif %}
+      </table>
+    </div>
+    <p class="report-row-count">{{ rows|length }} dòng</p>
+  </section>
+{% endblock %}

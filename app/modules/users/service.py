@@ -19,6 +19,7 @@ class ConcurrentUserChange(UserManagementError):
 
 
 def create_user(db: Session, data: UserCreate, actor_id: int) -> tuple[User, str]:
+    _require_admin_actor(db, actor_id)
     username = data.username.strip()
     if db.scalar(select(User.id).where(User.username == username, User.deleted_at.is_(None))):
         raise UserManagementError("Tên đăng nhập này đã được sử dụng.")
@@ -49,6 +50,7 @@ def create_user(db: Session, data: UserCreate, actor_id: int) -> tuple[User, str
 
 
 def update_user(db: Session, data: UserUpdate, actor_id: int, target_id: int) -> User:
+    _require_admin_actor(db, actor_id)
     user = _load_user_for_update(db, target_id)
     if user.version != data.version:
         raise ConcurrentUserChange("Tài khoản đã được thay đổi. Hãy tải lại trang rồi thử lại.")
@@ -90,6 +92,7 @@ def update_user(db: Session, data: UserUpdate, actor_id: int, target_id: int) ->
 
 
 def reset_password(db: Session, actor_id: int, target_id: int) -> str:
+    _require_admin_actor(db, actor_id)
     user = _load_user_for_update(db, target_id)
     temporary_password = secrets.token_urlsafe(18)
     old_values = {"must_change_password": user.must_change_password}
@@ -120,6 +123,7 @@ def set_user_permission(
     data: PermissionInput,
     actor_id: int,
 ) -> UserPermission | None:
+    _require_admin_actor(db, actor_id)
     user = _load_user_for_update(db, target_id)
     if (data.can_create or data.can_edit or data.can_delete) and not data.can_view:
         raise UserManagementError("Quyền thêm, sửa hoặc xóa phải đi kèm quyền xem.")
@@ -203,10 +207,20 @@ def list_user_permissions(db: Session, target_id: int) -> list[UserPermission]:
     )
 
 
-def list_users(db: Session) -> list[User]:
-    return list(
-        db.scalars(select(User).where(User.deleted_at.is_(None)).order_by(User.username, User.id))
+def list_users(db: Session, *, limit: int | None = None, offset: int = 0) -> list[User]:
+    query = (
+        select(User)
+        .where(User.deleted_at.is_(None))
+        .order_by(User.username, User.id)
+        .offset(offset)
     )
+    if limit is not None:
+        query = query.limit(limit)
+    return list(db.scalars(query))
+
+
+def count_users(db: Session) -> int:
+    return db.scalar(select(func.count(User.id)).where(User.deleted_at.is_(None))) or 0
 
 
 def get_user(db: Session, target_id: int) -> User | None:
@@ -220,6 +234,19 @@ def _load_user_for_update(db: Session, target_id: int) -> User:
     if user is None:
         raise UserManagementError("Không tìm thấy tài khoản.")
     return user
+
+
+def _require_admin_actor(db: Session, actor_id: int) -> None:
+    actor = db.scalar(
+        select(User).where(
+            User.id == actor_id,
+            User.role == "admin",
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
+    )
+    if actor is None:
+        raise UserManagementError("Chỉ Admin đang hoạt động được quản lý tài khoản.")
 
 
 def _ensure_another_active_admin(db: Session, current_user_id: int) -> None:

@@ -10,7 +10,7 @@ class DefectCodeCreate(BaseModel):
 
     code: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=200)
-    defect_group: str = Field(min_length=1, max_length=100)
+    defect_group: str = Field(default="", max_length=100)
     detected_at: DetectedAt
 
 

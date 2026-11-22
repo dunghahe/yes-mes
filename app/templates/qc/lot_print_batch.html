@@ -1,0 +1,5 @@
+{% for page in pages %}
+  <article class="print-page lot-print-page" aria-label="Biểu QC lô {{ loop.index }}">
+    <img src="{{ page }}" alt="Biểu QC theo lô, trang {{ loop.index }}">
+  </article>
+{% endfor %}

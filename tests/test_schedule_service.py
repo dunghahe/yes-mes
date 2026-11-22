@@ -20,6 +20,7 @@ from app.modules.schedules.service import (
     ConcurrentScheduleChange,
     ScheduleManagementError,
     create_schedule_batch,
+    list_schedules,
     soft_delete_schedule,
     update_schedule,
 )
@@ -39,7 +40,6 @@ def _fixtures(db: Session) -> tuple[User, Product, Shift, int]:
         code=f"SCH-{uuid4().hex}",
         name="Sản phẩm thử nghiệm",
         cycle_time_seconds=3,
-        default_process_type="FULL",
         is_active=True,
     )
     shift = Shift(
@@ -58,6 +58,7 @@ def _fixtures(db: Session) -> tuple[User, Product, Shift, int]:
             po_no=f"PO-{uuid4().hex}",
             product_id=product.id,
             ordered_quantity=100,
+            lot_size=100,
             process_type="FULL",
             raw_material_code="RM-01",
             drawing_number="DWG-01",
@@ -87,6 +88,7 @@ def _batch(
     [
         ("day", date(2026, 11, 5), date(2026, 11, 5), date(2026, 11, 5)),
         ("week", date(2026, 11, 5), date(2026, 11, 2), date(2026, 11, 8)),
+        ("list", date(2026, 11, 5), date(2026, 11, 2), date(2026, 11, 8)),
         ("month", date(2028, 2, 10), date(2028, 2, 1), date(2028, 2, 29)),
     ],
 )
@@ -97,13 +99,36 @@ def test_calendar_views_calculate_day_week_and_leap_month_ranges(
     assert actual_start == start
     assert actual_end == end
     assert end in days
-    if view == "week":
+    if view in {"week", "list"}:
         assert days[0].weekday() == 0
     elif view == "day":
         assert days == [start]
     else:
         assert start in days
         assert len(days) % 7 == 0
+
+
+def test_schedule_search_matches_product_and_preserves_other_filters() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        actor, product, shift, order_id = _fixtures(db)
+        rows, _ = create_schedule_batch(
+            db, _batch(shift.id, order_id, dates=[date(2026, 11, 22)], quantity=10), actor.id
+        )
+        found = list_schedules(
+            db,
+            start_date=date(2026, 11, 22),
+            end_date=date(2026, 11, 22),
+            query_text=product.code.lower(),
+            shift_id=shift.id,
+        )
+        assert [row[0].id for row in found] == [rows[0].id]
+        assert not list_schedules(db, query_text=product.code, shift_id=-1)
+        assert not list_schedules(db, query_text="'; DROP TABLE schedules; --")
+    finally:
+        db.rollback()
+        db.close()
 
 
 def test_batch_schedule_creates_audited_rows_and_warns_when_order_is_exceeded() -> None:

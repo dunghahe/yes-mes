@@ -1,34 +1,66 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="data-panel" aria-labelledby="page-title">
+  <section class="data-panel" aria-labelledby="page-title" x-data="{ openCreate: {{ 'true' if open_create else 'false' }}, openImport: {{ 'true' if open_import else 'false' }} }">
     <p class="eyebrow">Dữ liệu dùng chung</p>
     <h1 id="page-title">Quản lý mã hàng</h1>
-    <p class="intro">Cycle time được tính bằng giây trên mỗi sản phẩm. Khi thay đổi, các báo cáo đã ghi vẫn giữ cycle time tại thời điểm nhập.</p>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
     <div class="toolbar">
-      <a class="primary-button button-link" href="/admin/products/new">Tạo mã hàng</a>
-      <a class="secondary-button button-link" href="/">Về trang chủ</a>
+      <button class="primary-button" type="button" @click="openCreate=true">Tạo mã hàng</button>
+      <button class="secondary-button" type="button" @click="openImport=true">Nhập Excel</button>
+      <a class="secondary-button button-link" href="/admin/products/import/template">Tải file mẫu</a>
     </div>
     <div class="table-wrap">
       <table>
-        <thead>
-          <tr><th>Mã hàng</th><th>Tên hàng</th><th>Cycle time (giây/con)</th><th>Loại công đoạn mặc định</th><th>Trạng thái</th><th></th></tr>
-        </thead>
+        <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>Chu kỳ (giây/sản phẩm)</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>
           {% for product in products %}
             <tr>
-              <td>{{ product.code }}</td>
-              <td>{{ product.name }}</td>
-              <td>{{ product.cycle_time_seconds }}</td>
-              <td>{{ process_type_labels[product.default_process_type] }}</td>
+              <td>{{ product.code }}</td><td>{{ product.name }}</td><td>{{ product.cycle_time_seconds }}</td>
               <td>{% if product.is_active %}Đang dùng{% else %}Ngừng dùng{% endif %}</td>
               <td><a href="/admin/products/{{ product.id }}">Sửa</a></td>
             </tr>
-          {% else %}
-            <tr><td colspan="6">Chưa có mã hàng.</td></tr>
-          {% endfor %}
+          {% else %}<tr><td colspan="5">Chưa có mã hàng.</td></tr>{% endfor %}
         </tbody>
       </table>
+    </div>
+    {% if page_count is defined and page_count > 1 %}<nav class="pagination" aria-label="Trang mã hàng">
+      {% if page > 1 %}<a class="secondary-button button-link" href="/admin/products?page={{ page - 1 }}">Trước</a>{% endif %}
+      <span>Trang {{ page }} / {{ page_count }}</span>
+      {% if page < page_count %}<a class="secondary-button button-link" href="/admin/products?page={{ page + 1 }}">Sau</a>{% endif %}
+    </nav>{% endif %}
+
+    <div x-cloak x-show="openCreate" @keydown.escape.window="openCreate=false" @click.self="openCreate=false" class="modal-backdrop">
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="product-create-title">
+        <header class="modal-header"><h2 id="product-create-title">Tạo mã hàng</h2><button type="button" @click="openCreate=false" aria-label="Đóng">×</button></header>
+        <form method="post" action="/admin/products" class="form-stack modal-form" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+          <label for="product-code">Mã hàng</label>
+          <input id="product-code" name="code" maxlength="100" required value="{{ submitted.get('code', '') }}" aria-invalid="{{ 'true' if errors.get('code') else 'false' }}" aria-describedby="product-code-error">
+          {% if errors.get('code') %}<p id="product-code-error" class="field-error">{{ errors.get('code') }}</p>{% endif %}
+          <label for="product-name">Tên hàng</label>
+          <input id="product-name" name="name" maxlength="200" required value="{{ submitted.get('name', '') }}" aria-describedby="product-name-error">
+          {% if errors.get('name') %}<p id="product-name-error" class="field-error">{{ errors.get('name') }}</p>{% endif %}
+          <label for="product-cycle-time">Chu kỳ sản xuất (giây/sản phẩm)</label>
+          <input id="product-cycle-time" name="cycle_time_seconds" type="number" min="0.001" step="0.001" required value="{{ submitted.get('cycle_time_seconds', '') }}" aria-describedby="product-cycle-error">
+          {% if errors.get('cycle_time_seconds') %}<p id="product-cycle-error" class="field-error">{{ errors.get('cycle_time_seconds') }}</p>{% endif %}
+          <div class="modal-actions"><button class="primary-button" type="submit">Lưu mã hàng</button><button class="secondary-button" type="button" @click="openCreate=false">Hủy</button></div>
+        </form>
+      </section>
+    </div>
+
+    <div x-cloak x-show="openImport" @keydown.escape.window="openImport=false" @click.self="openImport=false" class="modal-backdrop">
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="product-import-title">
+        <header class="modal-header"><h2 id="product-import-title">Nhập mã hàng từ Excel</h2><button type="button" @click="openImport=false" aria-label="Đóng">×</button></header>
+        <form action="/admin/products/import/preview" method="post" enctype="multipart/form-data" class="form-stack modal-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="product-import-file">Chọn file .xlsx</label>
+          <input id="product-import-file" name="upload" type="file" accept=".xlsx" required>
+          <a href="/admin/products/import/template">Tải file mẫu</a>
+          <div class="modal-actions"><button class="primary-button" type="submit">Kiểm tra file</button><button class="secondary-button" type="button" @click="openImport=false">Hủy</button></div>
+        </form>
+      </section>
     </div>
   </section>
 {% endblock %}

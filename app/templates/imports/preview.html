@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Nhập dữ liệu</p>
+    <h1 id="page-title">{{ title }}</h1>
+    <p class="intro">Kiểm tra file trước khi ghi vào hệ thống.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Số dòng lỗi</th><th>Lỗi</th></tr></thead>
+        <tbody>{% for item in errors %}<tr><td>{{ item.row }}</td><td>{{ item.message }}</td></tr>{% else %}<tr><td colspan="2">Không có lỗi.</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <p class="helper-text">{{ rows|length }} dòng trong file · {{ errors|length }} lỗi</p>
+    {% if rows %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dòng</th>{% for key in rows[0] if key != '__row__' %}<th>{{ key }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in rows[:50] %}<tr><td>{{ row['__row__'] }}</td>{% for key, value in row.items() if key != '__row__' %}<td>{{ value or '—' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      {% if rows|length > 50 %}<p class="helper-text">Đang hiển thị 50 dòng đầu; toàn bộ {{ rows|length }} dòng sẽ được nhập.</p>{% endif %}
+    {% endif %}
+    {% if not errors %}
+      <form method="post" action="{{ confirm_url if confirm_url is defined else ('/admin/products/import/' + token + '/confirm' if resource == 'products' else '/orders/import/' + token + '/confirm') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="primary-button" type="submit">Nhập {{ rows|length }} dòng</button>
+      </form>
+    {% endif %}
+    <a class="secondary-button button-link" href="{{ return_url if return_url is defined else ('/admin/products' if resource == 'products' else '/orders') }}">Quay lại</a>
+  </section>
+{% endblock %}

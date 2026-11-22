@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Admin · Biểu in</p>
+    <h1 id="page-title">Mẫu biểu Excel</h1>
+    {% if active_template %}
+      <p class="helper-text">Đang dùng phiên bản {{ active_template.version }} · {{ active_template.file_name }} · cập nhật {{ active_template.updated_at.strftime('%d/%m/%Y %H:%M') }}</p>
+    {% else %}
+      <p class="helper-text">Đang dùng mẫu Excel đi kèm phần mềm.</p>
+    {% endif %}
+    <div class="toolbar">
+      <a class="secondary-button button-link" href="/admin/form-templates/preview" target="_blank" rel="noopener">Xem trước mẫu đang dùng</a>
+      <a class="secondary-button button-link" href="/admin/form-templates/current.xlsx">Tải Excel đang dùng</a>
+    </div>
+    <p>Tải lên tệp .xlsx có hai sheet “Sản lượng” và “QC theo lô”. Sheet “QC” cũ không còn dùng. Các ô có key @ma_san_pham, @ma_don_hang, @ma_ban_ve, @cap1.ten… sẽ được điền từ dữ liệu phần mềm. Mẫu không dùng công thức hoặc macro.</p>
+    <form method="post" action="/admin/form-templates" enctype="multipart/form-data" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="template-workbook">Tệp mẫu Excel (.xlsx, tối đa 10 MB)</label>
+      <input id="template-workbook" name="workbook" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      <button class="primary-button" type="submit">Kiểm tra và áp dụng mẫu mới</button>
+    </form>
+    <p class="helper-text">Mẫu cũ được lưu phiên bản để truy vết; thay mẫu chỉ ảnh hưởng các lượt in sau đó.</p>
+  </section>
+{% endblock %}

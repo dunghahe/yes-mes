@@ -17,18 +17,9 @@
       <input id="name" name="name" maxlength="200" required value="{{ submitted.get('name', product.name if product else '') }}" aria-describedby="name-error">
       {% if errors.get('name') %}<p id="name-error" class="field-error">{{ errors.get('name') }}</p>{% endif %}
 
-      <label for="cycle-time">Cycle time (giây/con)</label>
+      <label for="cycle-time">Chu kỳ sản xuất (giây/sản phẩm)</label>
       <input id="cycle-time" name="cycle_time_seconds" type="number" min="0.001" step="0.001" required value="{{ submitted.get('cycle_time_seconds', product.cycle_time_seconds if product else '') }}" aria-describedby="cycle-time-error">
       {% if errors.get('cycle_time_seconds') %}<p id="cycle-time-error" class="field-error">{{ errors.get('cycle_time_seconds') }}</p>{% endif %}
-
-      <label for="process-type">Loại công đoạn mặc định</label>
-      <select id="process-type" name="default_process_type" required aria-describedby="process-type-error">
-        <option value="">-- Chọn loại công đoạn --</option>
-        {% for process_type in process_types %}
-          <option value="{{ process_type }}" {% if submitted.get('default_process_type', product.default_process_type if product else '') == process_type %}selected{% endif %}>{{ process_type_labels[process_type] }}</option>
-        {% endfor %}
-      </select>
-      {% if errors.get('default_process_type') %}<p id="process-type-error" class="field-error">{{ errors.get('default_process_type') }}</p>{% endif %}
 
       {% if product %}
         <label class="checkbox-line" for="is-active">
@@ -36,8 +27,6 @@
           Mã hàng đang được sử dụng
         </label>
         <p class="helper-text">Bỏ chọn để ẩn mã hàng khỏi danh sách chọn. Dữ liệu cũ vẫn được giữ.</p>
-      {% else %}
-        <p class="helper-text">Loại công đoạn này là mặc định khi chọn mã hàng. PO vẫn lưu loại công đoạn riêng.</p>
       {% endif %}
 
       <button class="primary-button" type="submit">{% if product %}Lưu thay đổi{% else %}Tạo mã hàng{% endif %}</button>

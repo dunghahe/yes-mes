@@ -1,18 +1,67 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="data-panel warehouse-panel" aria-labelledby="page-title">
-    <p class="eyebrow">Kho nguyên vật liệu</p>
-    <h1 id="page-title">Yêu cầu phôi chờ giao <span class="queue-badge" id="queue-count" aria-live="polite">{{ queue_count }}</span></h1>
-    <div class="toolbar">
-      <a class="secondary-button button-link" href="/">Về trang chủ</a>
-      <button class="secondary-button" id="refresh-queue" type="button">Làm mới</button>
+  <section class="data-panel warehouse-panel" aria-labelledby="page-title" x-data="{ openLotPrint: {{ 'true' if lot_order_id else 'false' }} }">
+    <p class="eyebrow">Kho NVL</p>
+    <h1 id="page-title">Yêu cầu phôi · {{ 'Chờ giao' if queue_status == 'submitted' else 'Đã giao' }} <span class="queue-badge" id="queue-count" aria-live="polite">{{ queue_count }}</span></h1>
+    <div class="warehouse-queue-toolbar">
+      <nav class="warehouse-queue-filters" aria-label="Lọc yêu cầu phôi">
+        <a href="/warehouse/blank-requests?status_filter=submitted" {% if queue_status == 'submitted' %}aria-current="page"{% endif %}>Chờ giao</a>
+        <a href="/warehouse/blank-requests?status_filter=delivered" {% if queue_status == 'delivered' %}aria-current="page"{% endif %}>Đã giao</a>
+      </nav>
+      <div class="warehouse-lot-print">
+      <button class="secondary-button" type="button" @click="openLotPrint=true">In biểu QC theo lô</button>
+      <div x-cloak x-show="openLotPrint" @keydown.escape.window="openLotPrint=false" @click.self="openLotPrint=false" class="modal-backdrop lot-print-backdrop">
+        <section class="modal-panel lot-print-modal" role="dialog" aria-modal="true" aria-labelledby="lot-print-title">
+          <header class="modal-header"><h2 id="lot-print-title">In biểu QC theo lô</h2><button type="button" @click="openLotPrint=false" aria-label="Đóng">×</button></header>
+      <form method="get" action="/warehouse/blank-requests" class="modal-form lot-print-filter">
+        <input type="hidden" name="status_filter" value="{{ queue_status }}">
+        <div><label for="lot-order-choice">PO</label>
+        <select id="lot-order-choice" name="lot_order_id" required data-searchable-select data-autocomplete-label="PO" data-autocomplete-placeholder="Gõ số PO để tìm…">
+          <option value="">-- Chọn PO --</option>{% for item, product in lot_orders %}<option value="{{ item.id }}" data-selected-label="{{ item.po_no }}" {% if lot_order_id == item.id %}selected{% endif %}>{{ item.po_no }} · {{ product.code }} · {{ item.ordered_quantity }} sp</option>{% endfor %}
+        </select></div>
+        <div><label for="lot-from">Từ lô số</label><input id="lot-from" name="lot_from" type="number" min="1" step="1" value="{{ lot_from|default(1) }}"></div>
+        <div><label for="lot-count">Số biểu</label><input id="lot-count" name="lot_count" type="number" min="1" max="100" step="1" value="{{ lot_count|default(10) }}"></div>
+        <button class="secondary-button" type="submit">Hiện lô</button>
+      </form>
+      {% if lot_order_id %}
+        <form method="post" action="/warehouse/blank-requests/qc-lots/print" class="modal-form lot-print-select-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="lot_order_id" value="{{ lot_order_id }}">
+          {% if lots_for_print %}
+            <div class="lot-print-selection-tools"><strong>{{ lots_for_print|length }} lô hiển thị</strong><button type="button" class="secondary-button" data-select-lots>Chọn lô hiển thị</button></div>
+            <div class="table-wrap"><table><thead><tr><th>Chọn</th><th>Lô</th><th>Số lượng</th><th>Trạng thái in</th><th>QC</th></tr></thead><tbody>
+              {% for item in lots_for_print %}<tr><td><input type="checkbox" name="lot_id" value="{{ item.id }}" aria-label="Chọn lô {{ item.lot_code }}"></td><td><strong>{{ item.lot_code }}</strong></td><td>{{ item.quantity }}</td><td>{{ 'Đã gửi in' if item.printed_at else 'Chưa in' }}</td><td>{{ 'Đã nhập' if item.id in qc_done_lot_ids else 'Chưa nhập' }}</td></tr>{% endfor %}
+            </tbody></table></div>
+            <button class="primary-button" type="submit" data-html-print-url="/warehouse/blank-requests/qc-lots/print" data-csrf-token="{{ csrf_token }}">In biểu đã chọn</button>
+          {% else %}<p>Không có lô trong khoảng đã chọn.</p>{% endif %}
+        </form>
+      {% endif %}
+          <div class="modal-actions"><button class="secondary-button" type="button" @click="openLotPrint=false">Đóng</button></div>
+        </section>
+      </div>
+      </div>
     </div>
     {% if quantity_mismatch %}<p class="form-error" role="alert">Đã ghi nhận giao phôi. Số thực giao khác số yêu cầu; hãy rà soát số lượng.</p>
     {% elif delivery_notice %}<p class="notice" role="status">Đã xác nhận giao phôi.</p>{% endif %}
-    <p class="helper-text">Danh sách tự làm mới mỗi 15 giây. Có thể in lại biểu từ từng yêu cầu.</p>
-    <div id="queue-fragment" hx-get="{{ queue_url }}" hx-trigger="load, every 15s, click from:#refresh-queue" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+    <div id="queue-fragment" hx-get="{{ queue_url }}" hx-trigger="load, every 15s, refreshQueue" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
       {% include "warehouse/queue_fragment.html" %}
     </div>
+    <p id="print-status" class="helper-text" role="status" aria-live="polite" hidden></p>
+    <button id="print-retry" class="secondary-button" type="button" hidden>In lại biểu</button>
+    <dialog class="delivery-confirm-dialog" data-delivery-dialog aria-labelledby="delivery-confirm-title">
+      <header class="modal-header"><h2 id="delivery-confirm-title">Xác nhận đã giao phôi</h2><button type="button" data-close-delivery aria-label="Đóng">×</button></header>
+      <form method="post" class="modal-form" data-delivery-form>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="version" data-delivery-version>
+        <p><strong data-delivery-request></strong> · PO <span data-delivery-po></span></p>
+        <div class="modal-actions"><button class="primary-button" type="submit">Xác nhận đã giao</button><button class="secondary-button" type="button" data-close-delivery>Hủy</button></div>
+      </form>
+    </dialog>
 </section>
+<section id="print-container" class="print-container" hidden aria-hidden="true"></section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', path='js/print-dialog.js').path }}?v=20261122-1" defer></script>
+  <script src="{{ url_for('static', path='js/warehouse.js').path }}?v=20261122-1" defer></script>
 {% endblock %}

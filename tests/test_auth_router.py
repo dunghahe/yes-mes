@@ -1,6 +1,6 @@
 import re
 from collections.abc import Generator
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, time
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
@@ -10,14 +10,13 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.db import engine, get_db
 from app.main import app
-from app.modules.assets.models import Machine, MachineGroup, MachineGroupAssignment, MachinePair
+from app.modules.assets.models import Machine, MachinePair
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME
 from app.modules.auth.models import AuditLog, User
 from app.modules.auth.service import hash_password, verify_password
 from app.modules.auth.totp import totp_code_for_counter
 from app.modules.blank_requests.models import (
     BlankRequest,
-    BlankRequestOperator,
     BlankRequestPair,
     BlankRequestPrint,
 )
@@ -159,7 +158,6 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
         code=f"ORD-{uuid4().hex}",
         name="Mã hàng PO thử",
         cycle_time_seconds=3,
-        default_process_type="FULL",
         is_active=True,
     )
     shift = Shift(
@@ -192,8 +190,9 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
             assert login.status_code == 303
             order_list = client.get("/orders")
             assert order_list.status_code == 200
-            assert 'href="/orders/new"' in order_list.text
-            form_page = client.get("/orders/new")
+            assert '@click="openCreate=true"' in order_list.text
+            form_page = client.get("/orders?new=1")
+            assert form_page.status_code == 200
             csrf = re.search(r'name="csrf_token" value="([^\"]+)"', form_page.text).group(1)
             po_no = f"PO-{uuid4().hex}"
             response = client.post(
@@ -203,6 +202,7 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
                     "po_no": po_no,
                     "product_id": product.id,
                     "ordered_quantity": 120,
+                    "lot_size": 50,
                     "process_type": "FULL",
                     "raw_material_code": "RM-01",
                     "drawing_number": "DWG-01",
@@ -269,8 +269,9 @@ def test_order_routes_allow_planning_and_reject_data_entry() -> None:
             assert login.status_code == 303
             order_list = client.get("/orders")
             assert order_list.status_code == 200
-            assert 'href="/orders/new"' not in order_list.text
-            assert client.get("/orders/new").status_code == 403
+            assert '@click="openCreate=true"' not in order_list.text
+            assert client.get("/orders?new=1").status_code == 200
+            assert client.post("/orders", data={"csrf_token": "x"}).status_code == 403
     finally:
         app.dependency_overrides.pop(get_db, None)
         db.close()
@@ -413,8 +414,9 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
             )
             assert temporary_password not in str(audit.new_values)
 
-            product_page = client.get("/admin/products/new")
+            product_page = client.get("/admin/products?new=1")
             assert product_page.status_code == 200
+            assert 'action="/admin/products"' in product_page.text
             csrf = re.search(r'name="csrf_token" value="([^"]+)"', product_page.text).group(1)
             product_code = f"SP-{uuid4().hex[:12]}"
             created_product = client.post(
@@ -424,7 +426,6 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                     "code": product_code,
                     "name": "Sản phẩm thử nghiệm",
                     "cycle_time_seconds": "4.25",
-                    "default_process_type": "FULL",
                 },
             )
             assert created_product.status_code == 303
@@ -434,8 +435,21 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                 db.query(AuditLog).filter_by(table_name="products", record_id=product.id).one()
             )
             assert product_audit.actor_id is not None
-            assert product_audit.new_values["default_process_type"] == "FULL"
 
+            template_page = client.get("/admin/form-templates")
+            assert template_page.status_code == 200
+            assert "/admin/form-templates/preview" in template_page.text
+            assert "/admin/form-templates/current.xlsx" in template_page.text
+            current_template = client.get("/admin/form-templates/current.xlsx")
+            assert current_template.status_code == 200
+            assert current_template.headers["content-type"].startswith(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            assert current_template.content.startswith(b"PK")
+            template_preview = client.get("/admin/form-templates/preview")
+            assert template_preview.status_code == 200
+            assert template_preview.headers["content-type"].startswith("text/html")
+            assert 'src="data:image/png;base64,' in template_preview.text
             assets_page = client.get("/admin/machines")
             assert assets_page.status_code == 200
             csrf = re.search(r'name="csrf_token" value="([^"]+)"', assets_page.text).group(1)
@@ -456,15 +470,8 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                     },
                 )
                 assert response.status_code == 303
-            group_code = f"G-{asset_key}"
-            response = client.post(
-                "/admin/machines/groups",
-                data={"csrf_token": csrf, "code": group_code, "name": "Nhóm máy thử"},
-            )
-            assert response.status_code == 303
             first_machine = db.query(Machine).filter_by(code=first_machine_code).one()
             second_machine = db.query(Machine).filter_by(code=second_machine_code).one()
-            group = db.query(MachineGroup).filter_by(code=group_code).one()
             response = client.post(
                 "/admin/machines/pairs",
                 data={
@@ -474,20 +481,8 @@ def test_admin_first_login_forces_password_change_and_totp_setup(
                 },
             )
             assert response.status_code == 303
-            pair = (
-                db.query(MachinePair)
-                .filter_by(
-                    machine_1_id=min(first_machine.id, second_machine.id),
-                    machine_2_id=max(first_machine.id, second_machine.id),
-                )
-                .one()
-            )
-            response = client.post(
-                f"/admin/machines/pairs/{pair.id}/group",
-                data={"csrf_token": csrf, "machine_group_id": group.id},
-            )
-            assert response.status_code == 303
-            assert group.name in client.get("/admin/machines").text
+            assert "Nhóm máy" not in client.get("/admin/machines").text
+            assert client.post("/admin/machines/groups").status_code == 404
 
             employee_page = client.get("/admin/employees")
             assert employee_page.status_code == 200
@@ -603,7 +598,6 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
         code=f"BR-{uuid4().hex}",
         name="Sản phẩm yêu cầu",
         cycle_time_seconds=3,
-        default_process_type="FULL",
         is_active=True,
     )
     shift = Shift(
@@ -614,15 +608,12 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
         crosses_midnight=False,
         is_active=True,
     )
-    group = MachineGroup(code=f"G-{uuid4().hex}", name="Nhóm YC", is_active=True)
     machine_1 = Machine(code=f"M1-{uuid4().hex[:8]}", name="Máy YC 1", production_area="Khu A")
     machine_2 = Machine(code=f"M2-{uuid4().hex[:8]}", name="Máy YC 2", production_area="Khu A")
     operator = Employee(
         code=f"NV-{uuid4().hex}", name="Vận hành YC", employee_type="operator", is_active=True
     )
-    db.add_all(
-        [engineering, warehouse, data_entry, product, shift, group, machine_1, machine_2, operator]
-    )
+    db.add_all([engineering, warehouse, data_entry, product, shift, machine_1, machine_2, operator])
     db.flush()
     pair = MachinePair(
         machine_1_id=min(machine_1.id, machine_2.id),
@@ -631,19 +622,11 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
     )
     db.add(pair)
     db.flush()
-    db.add(
-        MachineGroupAssignment(
-            machine_pair_id=pair.id,
-            machine_group_id=group.id,
-            valid_from=now - timedelta(days=1),
-            created_by=engineering.id,
-            updated_by=engineering.id,
-        )
-    )
     order = ProductionOrder(
         po_no=f"PO-{uuid4().hex}",
         product_id=product.id,
         ordered_quantity=50,
+        lot_size=50,
         process_type="FULL",
         raw_material_code="RM-01",
         drawing_number="DWG-01",
@@ -684,9 +667,7 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 },
             )
             assert login.status_code == 303
-            request_page = client.get(
-                f"/blank-requests/new?schedule_id={schedule.id}&machine_group_id={group.id}"
-            )
+            request_page = client.get(f"/blank-requests/new?schedule_id={schedule.id}")
             csrf = re.search(r'name="csrf_token" value="([^\"]+)"', request_page.text).group(1)
             assert machine_1.code in request_page.text
             created = client.post(
@@ -694,8 +675,6 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 data={
                     "csrf_token": csrf,
                     "schedule_id": schedule.id,
-                    "blank_quantity": 40,
-                    "machine_group_id": group.id,
                     "machine_pair_ids": [pair.id],
                     "operator_ids": [operator.id],
                 },
@@ -703,26 +682,25 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
             assert created.status_code == 303
             blank_request = db.query(BlankRequest).one()
             assert blank_request.status == "submitted"
+            assert blank_request.machine_group_id is None
             assert re.fullmatch(r"YC-\d{6}-01", blank_request.req_no)
             assert (
                 db.query(BlankRequestPair).filter_by(blank_request_id=blank_request.id).count() == 1
             )
             assert (
-                db.query(BlankRequestOperator).filter_by(blank_request_id=blank_request.id).count()
+                db.query(BlankRequestPair)
+                .filter_by(blank_request_id=blank_request.id, employee_id=operator.id)
+                .count()
                 == 1
             )
             delivered_request = blank_request
-            request_page = client.get(
-                f"/blank-requests/new?schedule_id={schedule.id}&machine_group_id={group.id}"
-            )
+            request_page = client.get(f"/blank-requests/new?schedule_id={schedule.id}")
             csrf = re.search(r'name="csrf_token" value="([^\"]+)"', request_page.text).group(1)
             second_created = client.post(
                 "/blank-requests",
                 data={
                     "csrf_token": csrf,
                     "schedule_id": schedule.id,
-                    "blank_quantity": 40,
-                    "machine_group_id": group.id,
                     "machine_pair_ids": [pair.id],
                     "operator_ids": [operator.id],
                 },
@@ -745,15 +723,42 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
             queue_page = client.get("/warehouse/blank-requests")
             assert queue_page.status_code == 200
             assert "2" in re.search(r'id="queue-count"[^>]*>(.*?)</span>', queue_page.text).group(1)
-            assert client.get("/warehouse/blank-requests/queue-fragment").status_code == 200
-            production_print = client.get(
-                f"/warehouse/blank-requests/{delivered_request.id}/print/production"
+            later_queue = client.get("/warehouse/blank-requests/queue-fragment")
+            assert later_queue.status_code == 200
+            assert "In biểu sản xuất" in later_queue.text
+            csrf_match = re.search(
+                r'data-print-url="[^"]+/print/initial" data-csrf-token="([^"]+)"', later_queue.text
             )
-            qc_print = client.get(f"/warehouse/blank-requests/{delivered_request.id}/print/qc")
-            assert production_print.status_code == qc_print.status_code == 200
-            assert delivered_request.req_no in production_print.text
-            assert delivered_request.req_no in qc_print.text
-            assert "data:image/png;base64," in production_print.text
+            assert csrf_match is not None
+            print_csrf = csrf_match.group(1)
+            initial_print = client.post(
+                f"/warehouse/blank-requests/{delivered_request.id}/print/initial",
+                data={"csrf_token": print_csrf},
+            )
+            assert initial_print.status_code == 200
+            assert initial_print.text.count("data:image/png;base64,") == 1
+            assert "iframe" not in initial_print.text
+            later_queue = client.get("/warehouse/blank-requests/queue-fragment")
+            production_url = (
+                f'data-print-url="/warehouse/blank-requests/{delivered_request.id}'
+                '/print/production"'
+            )
+            qc_url = f'data-print-url="/warehouse/blank-requests/{delivered_request.id}/print/qc"'
+            assert production_url in later_queue.text
+            assert qc_url not in later_queue.text
+            production_print = client.post(
+                f"/warehouse/blank-requests/{delivered_request.id}/print/production",
+                data={"csrf_token": print_csrf},
+            )
+            qc_print = client.post(
+                f"/warehouse/blank-requests/{delivered_request.id}/print/qc",
+                data={"csrf_token": print_csrf},
+            )
+            assert production_print.status_code == 200
+            assert qc_print.status_code == 422
+            assert "text/html" in production_print.headers["content-type"]
+            assert 'src="data:image/png;base64,' in production_print.text
+            assert "iframe" not in production_print.text
             assert (
                 db.query(BlankRequestPrint).filter_by(blank_request_id=delivered_request.id).count()
                 == 2
@@ -766,13 +771,12 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 data={
                     "csrf_token": csrf,
                     "version": delivered_request.version,
-                    "actual_quantity": 38,
                 },
             )
             assert delivered.status_code == 303
-            assert "quantity_mismatch=1" in delivered.headers["location"]
+            assert "quantity_mismatch=1" not in delivered.headers["location"]
             assert delivered_request.status == "delivered"
-            assert delivered_request.delivered_quantity == 38
+            assert delivered_request.delivered_quantity is None
 
         with TestClient(app, base_url="https://testserver", follow_redirects=False) as client:
             login_page = client.get("/auth/login")
@@ -787,9 +791,12 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
             )
             assert login.status_code == 303
             assert client.get("/warehouse/blank-requests").status_code == 403
+            assert client.get("/admin/form-templates").status_code == 403
+            assert client.get("/admin/form-templates/current.xlsx").status_code == 403
             assert (
-                client.get(
-                    f"/warehouse/blank-requests/{blank_request.id}/print/production"
+                client.post(
+                    f"/warehouse/blank-requests/{blank_request.id}/print/production",
+                    data={"csrf_token": "x"},
                 ).status_code
                 == 403
             )
@@ -805,15 +812,12 @@ def test_engineering_can_create_blank_request_and_warehouse_can_only_view() -> N
                 data={
                     "csrf_token": csrf,
                     "version": blank_request.version,
-                    "blank_quantity": 35,
-                    "machine_group_id": group.id,
                     "machine_pair_ids": [pair.id],
                     "operator_ids": [operator.id],
                     "reason": "Sửa theo giấy mới",
                 },
             )
             assert updated.status_code == 303
-            assert blank_request.blank_quantity == 35
             assert blank_request.version == 2
             cancel_page = client.get(f"/blank-requests/{blank_request.id}")
             csrf = re.search(r'name="csrf_token" value="([^\"]+)"', cancel_page.text).group(1)

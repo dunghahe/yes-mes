@@ -58,7 +58,6 @@ def _fixtures(db: Session) -> dict[str, object]:
         code=f"BR-{uuid4().hex}",
         name="Sản phẩm thử",
         cycle_time_seconds=3,
-        default_process_type="FULL",
         is_active=True,
     )
     shift = Shift(
@@ -102,6 +101,7 @@ def _fixtures(db: Session) -> dict[str, object]:
             po_no=f"PO-{uuid4().hex}",
             product_id=product.id,
             ordered_quantity=100,
+            lot_size=100,
             process_type="FULL",
             raw_material_code="RM-01",
             drawing_number="DWG-01",
@@ -135,8 +135,6 @@ def _fixtures(db: Session) -> dict[str, object]:
 def _data(fixtures: dict[str, object], **updates: object) -> BlankRequestCreate:
     values = {
         "schedule_id": fixtures["schedule"].id,
-        "blank_quantity": 50,
-        "machine_group_id": fixtures["group"].id,
         "machine_pair_ids": [fixtures["pair"].id],
         "operator_ids": [fixtures["operator"].id],
     }
@@ -158,7 +156,6 @@ def test_create_request_generates_daily_number_and_audits_selected_resources() -
                         (
                             "blank_requests",
                             "blank_request_pairs",
-                            "blank_request_operators",
                             "blank_request_counters",
                         )
                     )
@@ -169,11 +166,12 @@ def test_create_request_generates_daily_number_and_audits_selected_resources() -
         assert first.req_no == "YC-261105-01"
         assert second.req_no == "YC-261105-02"
         assert first.status == "submitted"
+        assert first.machine_group_id is None
         assert request_resources(db, [first.id]) == {
             first.id: ([fixtures["pair"].id], [fixtures["operator"].id])
         }
         assert db.scalar(select(BlankRequestCounter.last_number)) == 2
-        assert len(audit_rows) == 8
+        assert len(audit_rows) == 6
     finally:
         db.rollback()
         db.close()
@@ -182,8 +180,6 @@ def test_create_request_generates_daily_number_and_audits_selected_resources() -
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("blank_quantity", 0),
-        ("blank_quantity", -2),
         ("machine_pair_ids", []),
         ("operator_ids", []),
         ("machine_pair_ids", [1, 1]),
@@ -195,8 +191,6 @@ def test_request_rejects_missing_or_invalid_required_values(field: str, value: o
         BlankRequestCreate.model_validate(
             {
                 "schedule_id": 1,
-                "blank_quantity": 10,
-                "machine_group_id": 1,
                 "machine_pair_ids": [1],
                 "operator_ids": [1],
                 field: value,
@@ -204,7 +198,7 @@ def test_request_rejects_missing_or_invalid_required_values(field: str, value: o
         )
 
 
-def test_request_rejects_inactive_schedule_wrong_group_or_nonoperator() -> None:
+def test_request_rejects_inactive_schedule_pair_or_nonoperator() -> None:
     db = SessionLocal()
     try:
         db.begin()
@@ -216,16 +210,15 @@ def test_request_rejects_inactive_schedule_wrong_group_or_nonoperator() -> None:
             create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
         schedule.deleted_at = None
 
-        other_group = MachineGroup(code=f"G-{uuid4().hex}", name="Nhóm khác", is_active=True)
-        db.add(other_group)
-        db.flush()
-        with pytest.raises(BlankRequestManagementError, match="thuộc nhóm"):
+        fixtures["pair"].is_active = False
+        with pytest.raises(BlankRequestManagementError, match="cặp máy đang sử dụng"):
             create_blank_request(
                 db,
-                _data(fixtures, machine_group_id=other_group.id),
+                _data(fixtures),
                 actor.id,
                 today=date(2026, 11, 5),
             )
+        fixtures["pair"].is_active = True
 
         with pytest.raises(BlankRequestManagementError, match="vận hành"):
             create_blank_request(
@@ -251,8 +244,6 @@ def test_update_request_uses_version_reason_and_audits_old_and_new_values() -> N
             db,
             request.id,
             BlankRequestUpdate(
-                blank_quantity=75,
-                machine_group_id=fixtures["group"].id,
                 machine_pair_ids=[fixtures["pair"].id],
                 operator_ids=[fixtures["operator"].id],
                 reason="Sửa theo phiếu giấy đã hiệu chỉnh",
@@ -267,18 +258,13 @@ def test_update_request_uses_version_reason_and_audits_old_and_new_values() -> N
             .order_by(AuditLog.id.desc())
         )
 
-        assert updated.blank_quantity == 75
         assert updated.version == old_version + 1
-        assert audit.old_values["blank_quantity"] == 50
-        assert audit.new_values["blank_quantity"] == 75
         assert audit.reason == "Sửa theo phiếu giấy đã hiệu chỉnh"
         with pytest.raises(ConcurrentBlankRequestChange, match="tải lại"):
             update_blank_request(
                 db,
                 request.id,
                 BlankRequestUpdate(
-                    blank_quantity=80,
-                    machine_group_id=fixtures["group"].id,
                     machine_pair_ids=[fixtures["pair"].id],
                     operator_ids=[fixtures["operator"].id],
                     reason="Sửa lần hai",
@@ -300,15 +286,13 @@ def test_only_admin_can_edit_delivered_request_and_cannot_cancel_it() -> None:
         actor = fixtures["actor"]
         request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
         request.status = "delivered"
-        request.delivered_quantity = request.blank_quantity
+        request.delivered_quantity = 40
         request.delivered_at = datetime.now(UTC)
         request.delivered_by = actor.id
         update_blank_request(
             db,
             request.id,
             BlankRequestUpdate(
-                blank_quantity=55,
-                machine_group_id=fixtures["group"].id,
                 machine_pair_ids=[fixtures["pair"].id],
                 operator_ids=[fixtures["operator"].id],
                 reason="Admin sửa sau khi giao",
@@ -322,8 +306,6 @@ def test_only_admin_can_edit_delivered_request_and_cannot_cancel_it() -> None:
                 db,
                 request.id,
                 BlankRequestUpdate(
-                    blank_quantity=60,
-                    machine_group_id=fixtures["group"].id,
                     machine_pair_ids=[fixtures["pair"].id],
                     operator_ids=[fixtures["operator"].id],
                     reason="Nhập liệu sửa",
@@ -339,7 +321,7 @@ def test_only_admin_can_edit_delivered_request_and_cannot_cancel_it() -> None:
         db.close()
 
 
-def test_confirm_delivery_warns_on_quantity_mismatch_and_audits_delivery() -> None:
+def test_confirm_delivery_uses_actual_quantity_and_audits_delivery() -> None:
     db = SessionLocal()
     try:
         db.begin()
@@ -347,6 +329,7 @@ def test_confirm_delivery_warns_on_quantity_mismatch_and_audits_delivery() -> No
         actor = fixtures["actor"]
         request = create_blank_request(db, _data(fixtures), actor.id, today=date(2026, 11, 5))
 
+        register_print(db, request.id, "production", actor.id)
         delivered, mismatch = confirm_delivery(db, request.id, 48, request.version, actor.id)
 
         audit = db.scalar(
@@ -354,7 +337,7 @@ def test_confirm_delivery_warns_on_quantity_mismatch_and_audits_delivery() -> No
             .where(AuditLog.table_name == "blank_requests", AuditLog.record_id == request.id)
             .order_by(AuditLog.id.desc())
         )
-        assert mismatch
+        assert not mismatch
         assert delivered.status == "delivered"
         assert delivered.delivered_quantity == 48
         assert delivered.delivered_by == actor.id
@@ -362,14 +345,83 @@ def test_confirm_delivery_warns_on_quantity_mismatch_and_audits_delivery() -> No
         assert audit.action == "deliver"
         assert audit.old_values["status"] == "submitted"
         assert audit.new_values["delivered_quantity"] == 48
-        assert audit.reason == "Kho xác nhận đã giao phôi"
+        assert audit.reason == "Kho NVL xác nhận đã giao phôi"
 
         with pytest.raises(ConcurrentBlankRequestChange, match="tải lại"):
             confirm_delivery(db, request.id, 50, version=1, actor_id=actor.id)
-        with pytest.raises(BlankRequestManagementError, match="đang chờ kho"):
+        with pytest.raises(BlankRequestManagementError, match="đang chờ Kho NVL"):
             confirm_delivery(db, request.id, 50, delivered.version, actor.id)
         with pytest.raises(ValidationError):
             BlankRequestDelivery(actual_quantity=0, version=1)
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_delivery_without_quantity_requires_production_print_and_audits() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        request = create_blank_request(db, _data(fixtures), actor.id)
+        with pytest.raises(BlankRequestManagementError, match="gửi in biểu"):
+            confirm_delivery(db, request.id, None, request.version, actor.id)
+        register_print(db, request.id, "qc", actor.id)
+        with pytest.raises(BlankRequestManagementError, match="gửi in biểu"):
+            confirm_delivery(db, request.id, None, request.version, actor.id)
+        register_print(db, request.id, "production", actor.id)
+        delivered, mismatch = confirm_delivery(db, request.id, None, request.version, actor.id)
+        db.flush()
+        assert delivered.delivered_quantity is None
+        assert delivered.delivered_at is not None
+        assert delivered.delivered_by == actor.id
+        assert delivered.status == "delivered"
+        assert not mismatch
+        audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.table_name == "blank_requests",
+                AuditLog.record_id == request.id,
+                AuditLog.action == "deliver",
+            )
+        )
+        assert audit.new_values["delivered_quantity"] is None
+        assert BlankRequestDelivery(version=1).actual_quantity is None
+        register_print(db, request.id, "production", actor.id)  # Reprints remain possible.
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_bavia_only_can_save_after_delivery_with_unknown_quantity() -> None:
+    from app.modules.daily_reports.bavia_schemas import BaviaReportInput
+    from app.modules.daily_reports.bavia_service import BaviaReportError, save_bavia_report
+    from app.modules.orders.models import ProductionOrder
+
+    db = SessionLocal()
+    try:
+        db.begin()
+        fixtures = _fixtures(db)
+        actor = fixtures["actor"]
+        schedule = fixtures["schedule"]
+        order = db.get(ProductionOrder, schedule.order_id)
+        order.process_type = "BAVIA_ONLY"
+        db.flush()
+        request = create_blank_request(db, BlankRequestCreate(schedule_id=schedule.id), actor.id)
+        data = BaviaReportInput(
+            order_id=order.id,
+            report_date=schedule.production_date,
+            shift_id=schedule.shift_id,
+            employee_id=fixtures["operator"].id,
+            quantity_produced=30,
+        )
+        with pytest.raises(BaviaReportError, match="xác nhận giao phôi"):
+            save_bavia_report(db, data, actor.id)
+        register_print(db, request.id, "production", actor.id)
+        confirm_delivery(db, request.id, None, request.version, actor.id)
+        report = save_bavia_report(db, data, actor.id)
+        assert report.quantity_produced == 30
+        assert request.delivered_quantity is None
     finally:
         db.rollback()
         db.close()

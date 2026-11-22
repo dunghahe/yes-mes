@@ -1,1 +1,1 @@
-"""Machines, pairs, and machine groups."""
+"""Machines and pairs; legacy group tables remain for history only."""

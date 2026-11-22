@@ -1,45 +1,45 @@
 {% extends "base.html" %}
 
 {% block content %}
-  {% set blank_request, schedule, order, product, shift, current_group = request_row %}
+  {% set blank_request, schedule, order, product, shift = request_row %}
   <section class="data-panel" aria-labelledby="page-title">
     <p class="eyebrow">Nhập liệu · Admin</p>
     <h1 id="page-title">Sửa {{ blank_request.req_no }}</h1>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
     <p class="helper-text">PO {{ order.po_no }} · mã hàng {{ product.code }} · {{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }}</p>
-    <p class="helper-text">Trạng thái: {{ {"submitted": "Chờ kho giao", "cancelled": "Đã hủy", "delivered": "Đã giao"}[blank_request.status] }}.</p>
-
-    <form method="get" action="/blank-requests/{{ blank_request.id }}" class="form-stack blank-request-picker">
-      <label for="edit-group-picker">Nhóm máy</label>
-      <select id="edit-group-picker" name="machine_group_id" required>
-        {% for group in group_options %}<option value="{{ group.id }}" {% if group_id == group.id %}selected{% endif %}>{{ group.code }} · {{ group.name }}</option>{% endfor %}
-      </select>
-      <button class="secondary-button" type="submit">Hiện cặp máy</button>
-    </form>
+    <p class="helper-text">Trạng thái: {{ {"submitted": "Chờ Kho NVL giao", "cancelled": "Đã hủy", "delivered": "Đã giao"}[blank_request.status] }}.</p>
 
     <form method="post" action="/blank-requests/{{ blank_request.id }}" class="form-stack blank-request-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="version" value="{{ blank_request.version }}">
-      <input type="hidden" name="machine_group_id" value="{{ group_id }}">
-      <label for="blank-quantity">Số lượng phôi</label>
-      <input id="blank-quantity" name="blank_quantity" type="number" min="1" step="1" required value="{{ submitted.get('blank_quantity', blank_request.blank_quantity) }}" aria-describedby="quantity-error">
-      {% if errors.get('blank_quantity') %}<p id="quantity-error" class="field-error">{{ errors.get('blank_quantity') }}</p>{% endif %}
-
-      <fieldset class="choice-fieldset">
-        <legend>Cặp máy (chọn ít nhất một)</legend>
-        {% for pair, machine_1, machine_2 in pair_options %}
-          <label><input type="checkbox" name="machine_pair_ids" value="{{ pair.id }}" {% if pair.id in selected_pairs %}checked{% endif %}> {{ machine_1.code }} – {{ machine_2.code }}{% if not pair.is_active %} (đã ngừng dùng){% endif %}</label>
-        {% else %}<p>Nhóm này chưa có cặp máy đang được bố trí.</p>{% endfor %}
-      </fieldset>
-      {% if errors.get('machine_pair_ids') %}<p class="field-error">{{ errors.get('machine_pair_ids') }}</p>{% endif %}
-
-      <fieldset class="choice-fieldset">
-        <legend>Người vận hành (chọn ít nhất một)</legend>
-        {% for employee in operator_options %}
-          <label><input type="checkbox" name="operator_ids" value="{{ employee.id }}" {% if employee.id in selected_operators %}checked{% endif %}> {{ employee.code }} · {{ employee.name }}{% if not employee.is_active %} (đã ngừng dùng){% endif %}</label>
-        {% else %}<p>Chưa có nhân viên vận hành đang sử dụng.</p>{% endfor %}
-      </fieldset>
-      {% if errors.get('operator_ids') %}<p class="field-error">{{ errors.get('operator_ids') }}</p>{% endif %}
+      <p class="helper-text">Số phôi do Kho NVL tự cân đối khi giao. Số lượng thành phẩm được quản lý riêng ở báo cáo sản xuất.</p>
+      {% if process_type == 'BAVIA_ONLY' %}
+        <p class="notice">Yêu cầu Bavia không cần khai báo cặp máy hoặc người làm máy.</p>
+      {% else %}
+        <fieldset class="choice-fieldset assignment-fieldset">
+          <legend>Cặp máy và người làm</legend>
+          <div class="assignment-list" data-assignment-list>
+            {% for selected_pair, selected_operator in assignment_rows %}
+              <div class="assignment-row" data-assignment-row>
+                <label for="pair-{{ loop.index }}">Cặp máy</label>
+                <select id="pair-{{ loop.index }}" name="machine_pair_ids" required data-searchable-select data-autocomplete-label="Cặp máy" data-autocomplete-placeholder="Gõ mã máy để tìm…">
+                  <option value="">-- Chọn cặp máy --</option>
+                  {% for pair, machine_1, machine_2 in pair_options %}<option value="{{ pair.id }}" {% if selected_pair == pair.id %}selected{% endif %}>{{ machine_1.code }} – {{ machine_2.code }}{% if not pair.is_active %} (đã ngừng dùng){% endif %}</option>{% endfor %}
+                </select>
+                <label for="operator-{{ loop.index }}">Người làm cặp này</label>
+                <select id="operator-{{ loop.index }}" name="operator_ids" data-employee-autocomplete required>
+                  <option value="">-- Chọn người làm --</option>
+                  {% for employee in operator_options %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if selected_operator == employee.id %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}{% if not employee.is_active %} (đã ngừng dùng){% endif %}</option>{% endfor %}
+                </select>
+                {% if not loop.first %}<button class="secondary-button" type="button" data-remove-assignment>Xóa dòng</button>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <button class="secondary-button" type="button" data-add-assignment>Thêm cặp máy</button>
+        </fieldset>
+        {% if errors.get('machine_pair_ids') or errors.get('operator_ids') %}<p class="field-error">{{ errors.get('machine_pair_ids') or errors.get('operator_ids') }}</p>{% endif %}
+      {% endif %}
+      {% if errors.get('form') %}<p class="field-error">{{ errors.get('form') }}</p>{% endif %}
 
       <label for="edit-reason">Lý do sửa (bắt buộc)</label>
       <textarea id="edit-reason" name="reason" minlength="3" maxlength="500" rows="3" required aria-describedby="reason-error">{{ submitted.get('reason', '') }}</textarea>
@@ -60,3 +60,5 @@
     {% endif %}
   </section>
 {% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='js/blank-request-assignments.js').path }}?v=20261112-1" defer></script>{% endblock %}

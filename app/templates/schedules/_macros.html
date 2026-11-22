@@ -1,0 +1,9 @@
+{% macro schedule_edit_attributes(item, order, class_name='schedule-card', hint='Nhấn đúp để sửa lịch') -%}
+  {% if can_edit %}class="{{ class_name }} schedule-edit-card" data-edit-schedule data-id="{{ item.id }}"
+    data-edit-url="/schedules/{{ item.id }}" data-delete-url="/schedules/{{ item.id }}/delete"
+    data-date="{{ item.production_date.isoformat() }}" data-shift-id="{{ item.shift_id }}"
+    data-order-id="{{ item.order_id }}" data-quantity="{{ item.planned_quantity }}"
+    data-version="{{ item.version }}" role="button" tabindex="0"
+    aria-label="Sửa lịch PO {{ order.po_no }} ngày {{ item.production_date.strftime('%d/%m/%Y') }}"
+    title="{{ hint }}"{% else %}class="{{ class_name }}"{% endif %}
+{%- endmacro %}

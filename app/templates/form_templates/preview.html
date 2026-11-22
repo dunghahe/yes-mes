@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <main class="rendered-document" data-auto-print="{{ 'true' if auto_print else 'false' }}">
+    <header class="rendered-document-toolbar screen-only">
+      <div>
+        <h1>{{ title }}</h1>
+        {% if request_number %}<p>Yêu cầu {{ request_number }}</p>{% endif %}
+        <p class="helper-text">{% if auto_print %}Đang mở hộp thoại in…{% else %}Xem nội dung các trang mẫu biểu bên dưới.{% endif %} Nếu hộp thoại chưa mở, bấm nút In.</p>
+      </div>
+      <button id="print-document-button" class="primary-button" type="button">In biểu</button>
+    </header>
+    <section class="print-pages" aria-label="Các trang biểu in">
+      {% for page in pages %}
+        <img class="print-page" src="{{ page }}" alt="Trang {{ loop.index }}">
+      {% endfor %}
+    </section>
+  </main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', path='js/print-dialog.js').path }}?v=20261112-3" defer></script>
+{% endblock %}

@@ -1,0 +1,80 @@
+name: mes
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mes}
+      POSTGRES_USER: ${POSTGRES_USER:-mes_bootstrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      MES_APP_PASSWORD: ${MES_APP_PASSWORD:?Set MES_APP_PASSWORD}
+      MES_MIGRATOR_PASSWORD: ${MES_MIGRATOR_PASSWORD:?Set MES_MIGRATOR_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/10-create-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    image: ${MES_IMAGE:-ygc-mes:release}
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "false"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set runtime DATABASE_URL}
+      TOTP_ENCRYPTION_KEYS: ${TOTP_ENCRYPTION_KEYS:?Set TOTP_ENCRYPTION_KEYS}
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:?Set Cloudflare Access team domain}
+      CLOUDFLARE_ACCESS_AUDIENCE: ${CLOUDFLARE_ACCESS_AUDIENCE:?Set Cloudflare Access audience}
+      XDG_CACHE_HOME: /tmp/cache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=512m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+    logging: *logging
+
+  migrate:
+    image: ${MES_IMAGE:-ygc-mes:release}
+    profiles: [tools]
+    environment:
+      APP_ENV: production
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set migration DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+volumes:
+  postgres_data:

@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /workspace
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libreoffice-calc poppler-utils fonts-liberation fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/*
+
 ARG INSTALL_DEV=false
 COPY requirements.lock requirements-dev.lock ./
 RUN if [ "$INSTALL_DEV" = "true" ]; then \
@@ -18,6 +22,7 @@ RUN if [ "$INSTALL_DEV" = "true" ]; then \
 COPY --chown=appuser:appuser app ./app
 COPY --chown=appuser:appuser scripts ./scripts
 COPY --chown=appuser:appuser migrations ./migrations
+COPY --chown=appuser:appuser docs/forms ./docs/forms
 COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 
 USER appuser

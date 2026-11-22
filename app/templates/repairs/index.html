@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel repair-page" aria-labelledby="page-title">
+    <p class="eyebrow">Theo dõi chất lượng · QC sản xuất</p>
+    <h1 id="page-title">Hàng mang đi sửa</h1>
+    <p class="intro">Theo dõi lượt mang đi sửa và QC lại theo mã phiếu.</p>
+
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    {% if success %}<p class="success-message" role="status">{{ success }}</p>{% endif %}
+
+    <section class="subsection repair-queue-section" aria-labelledby="queue-title">
+      <details class="repair-details">
+      <summary><h2 id="queue-title">Hàng sửa đang theo dõi · {{ queue|length }} PO / {{ repair_jobs_waiting_qc|length }} phiếu chờ QC</h2></summary>
+      <p class="helper-text">Theo dõi số chờ sửa theo PO, lô và mã phiếu.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>PO</th><th>NG sửa phát sinh</th><th>Đã mang đi sửa</th><th>Còn chờ sửa</th><th>Đã sửa, chờ QC</th><th>Đã vào QC lại</th></tr></thead>
+          <tbody>
+            {% for row in queue %}
+              <tr>
+                <td>{{ row.po_no }}</td>
+                <td>{{ row.repair_generated }}</td>
+                <td>{{ row.repaired_total }}</td>
+                <td><strong>{{ row.repair_waiting }}</strong></td>
+                <td><strong>{{ row.repaired_waiting_qc }}</strong></td>
+                <td>{{ row.rechecked_total }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">Hiện không có hàng sửa chờ xử lý.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3>Hàng chờ sửa theo lô</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>PO</th><th>Mã lô</th><th>NG sửa phát sinh</th><th>Đã mang đi</th><th>Còn chờ sửa</th></tr></thead>
+          <tbody>
+            {% for item in lot_balances %}
+              <tr><td>{{ item.order.po_no }}</td><td><strong>{{ item.lot.lot_code }}</strong></td><td>{{ item.repair_generated }}</td><td>{{ item.repaired_total }}</td><td><strong>{{ item.repair_waiting }}</strong></td></tr>
+            {% else %}<tr><td colspan="5">Hiện không có hàng chờ sửa theo lô.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3>Phiếu sửa đang chờ hàng về</h3>
+      <p class="helper-text">Dùng mã phiếu khi hàng sửa quay về.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã phiếu sửa</th><th>PO</th><th>Ngày mang đi</th><th>Người mang/nhận sửa</th><th>Đã mang đi</th><th>Đã QC lại</th><th>Còn chờ QC lại</th></tr></thead>
+          <tbody>
+            {% for item in repair_jobs_waiting_qc %}{% set job = item.repair_job %}
+              <tr><td><strong>{{ job.repair_code }}</strong></td><td>{{ item.order.po_no }}{% if job.production_lot_id %}<br><span class="muted">{{ lot_codes.get(job.production_lot_id, '') }}</span>{% endif %}</td><td>{{ job.repair_date.strftime('%d/%m/%Y') }}</td><td>{{ item.employee.name }}</td><td>{{ job.quantity_repaired }}</td><td>{{ item.quantity_rechecked }}</td><td><strong>{{ item.quantity_waiting_qc }}</strong></td></tr>
+            {% else %}
+              <tr><td colspan="7">Chưa có phiếu sửa nào chờ QC lại.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      </details>
+    </section>
+
+    {% if can_create %}
+      <div class="repair-form-grid">
+        <section class="subsection" aria-labelledby="dispatch-title">
+          <h2 id="dispatch-title">Ghi nhận mang hàng đi sửa</h2>
+          <p class="helper-text">Chọn người nhận và nhập số lượng mang đi.</p>
+          {% if not repair_employees %}<p class="warning-message">Chưa có nhân viên đang hoạt động. Hãy thêm nhân viên trong Quản lý nhân viên.</p>{% endif %}
+          <form method="post" action="/repairs/jobs/form" class="form-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="repair-lot">PO · lô</label>
+            <select id="repair-lot" name="production_lot_id" required data-searchable-select data-autocomplete-label="PO hoặc mã lô" data-autocomplete-placeholder="Gõ PO hoặc mã lô để tìm…">
+              <option value="">-- Chọn lô đang chờ sửa --</option>
+              {% for item in lot_balances %}<option value="{{ item.lot.id }}" {% if form_values.get('production_lot_id') == item.lot.id|string %}selected{% endif %}>{{ item.order.po_no }} · {{ item.lot.lot_code }} · còn {{ item.repair_waiting }}</option>{% endfor %}
+            </select>
+            <label for="repair-date">Ngày mang đi sửa</label>
+            <input id="repair-date" type="date" name="repair_date" value="{{ form_values.get('repair_date', today) }}" required>
+            <label for="repair-employee">Người mang/nhận sửa</label>
+            <select id="repair-employee" name="repair_employee_id" required data-employee-autocomplete>
+              <option value="">-- Chọn nhân viên --</option>
+              {% for employee in repair_employees %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if form_values.get('repair_employee_id') == employee.id|string %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}
+            </select>
+            <label for="repair-quantity">Số lượng mang đi sửa</label>
+            <input id="repair-quantity" type="number" name="quantity_repaired" min="1" step="1" value="{{ form_values.get('quantity_repaired', '') }}" required>
+            <label for="repair-note">Ghi chú <span class="helper-text">(không bắt buộc)</span></label>
+            <input id="repair-note" type="text" name="note" maxlength="1000" value="{{ form_values.get('note', '') }}">
+            <button class="primary-button" type="submit" {% if not lot_balances or not repair_employees %}disabled{% endif %}>Lưu lượt mang đi sửa</button>
+          </form>
+        </section>
+
+        <section class="subsection" aria-labelledby="recheck-title">
+          <h2 id="recheck-title">Ghi nhận QC lại</h2>
+          <p class="helper-text">Nhập mã phiếu. OK + NG phải bằng số vào QC lại.</p>
+          {% if not qc_employees %}<p class="warning-message">Chưa có nhân viên QC đang hoạt động.</p>{% endif %}
+          <form method="post" action="/repairs/rechecks/form" class="form-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="repair-code">Mã phiếu sửa</label>
+            <input id="repair-code" name="repair_code" type="text" maxlength="40" value="{{ form_values.get('repair_code', '') }}" list="repair-code-options" placeholder="Gõ hoặc chọn mã phiếu…" autocomplete="off" spellcheck="false" required>
+            <datalist id="repair-code-options">
+              {% for item in repair_jobs_waiting_qc %}
+                <option value="{{ item.repair_job.repair_code }}" label="{{ item.order.po_no }} · còn {{ item.quantity_waiting_qc }}"></option>
+              {% endfor %}
+            </datalist>
+            <label for="recheck-date">Ngày QC lại</label>
+            <input id="recheck-date" type="date" name="inspected_date" value="{{ form_values.get('inspected_date', today) }}" required>
+            <label for="recheck-shift">Ca/kíp QC lại</label>
+            <select id="recheck-shift" name="shift_id" required>
+              <option value="">-- Chọn ca/kíp --</option>
+              {% for shift in shifts %}<option value="{{ shift.id }}" {% if form_values.get('shift_id') == shift.id|string %}selected{% endif %}>{{ shift.name }} ({{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }})</option>{% endfor %}
+            </select>
+            <label for="recheck-employee">Người QC</label>
+            <select id="recheck-employee" name="qc_employee_id" required data-employee-autocomplete>
+              <option value="">-- Chọn nhân viên QC --</option>
+              {% for employee in qc_employees %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if form_values.get('qc_employee_id') == employee.id|string %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}
+            </select>
+            <div class="repair-count-grid">
+              <label for="recheck-in">Số đưa vào QC lại<input id="recheck-in" type="number" name="quantity_in" min="1" step="1" value="{{ form_values.get('quantity_in', '') }}" required></label>
+              <label for="recheck-ok">OK<input id="recheck-ok" type="number" name="quantity_ok" min="0" step="1" value="{{ form_values.get('quantity_ok', '0') }}" required></label>
+              <label for="recheck-scrap">NG hủy<input id="recheck-scrap" type="number" name="ng_scrap" min="0" step="1" value="{{ form_values.get('ng_scrap', '0') }}" required></label>
+              <label for="recheck-repair">NG sửa<input id="recheck-repair" type="number" name="ng_repair" min="0" step="1" value="{{ form_values.get('ng_repair', '0') }}" required></label>
+            </div>
+            <button class="primary-button" type="submit" {% if not orders or not qc_employees or not shifts %}disabled{% endif %}>Lưu kết quả QC lại</button>
+          </form>
+        </section>
+      </div>
+    {% else %}
+      <p class="helper-text">Tài khoản của bạn chỉ có quyền xem; chưa được cấp quyền ghi nhận sửa hoặc QC lại.</p>
+    {% endif %}
+
+    <section class="subsection repair-history-section" aria-labelledby="history-title">
+      <details class="repair-details">
+      <summary><h2 id="history-title">Lịch sử sửa và QC lại · {{ history|length }}</h2></summary>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ngày</th><th>Mã phiếu sửa</th><th>PO</th><th>Hoạt động</th><th>Người thực hiện</th><th>Số lượng</th><th>Kết quả</th><th>Ghi chú</th></tr></thead>
+          <tbody>
+            {% for row in history %}
+              <tr>
+                <td>{{ row.date }}</td>
+                <td>{{ row.repair_code or '—' }}</td>
+                <td>{{ row.po_no }}</td>
+                <td>{% if row.kind == 'repair' %}Mang đi sửa{% else %}QC lại{% endif %}</td>
+                <td>{{ row.employee or '—' }}</td>
+                {% if row.kind == 'repair' %}
+                  <td>{{ row.quantity }}</td><td>—</td><td>{{ row.note or '—' }}</td>
+                {% else %}
+                  <td>{{ row.quantity_in }}</td><td>OK {{ row.quantity_ok }} · NG hủy {{ row.ng_scrap }} · NG sửa {{ row.ng_repair }}</td><td>—</td>
+                {% endif %}
+              </tr>
+            {% else %}
+              <tr><td colspan="8">Chưa có lượt mang đi sửa hoặc QC lại.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      </details>
+    </section>
+  </section>
+{% endblock %}
+

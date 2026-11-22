@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
 from app.modules.auth.models import AuditLog, User
+from app.modules.orders.models import ProductionLot
 from app.modules.orders.schemas import OrderCreate, OrderUpdate
 from app.modules.orders.service import (
     ConcurrentOrderChange,
@@ -38,7 +39,6 @@ def _product(db: Session, *, active: bool = True) -> Product:
         code=f"ORDER-{uuid4().hex}",
         name="Mã hàng thử nghiệm",
         cycle_time_seconds=3,
-        default_process_type="FULL",
         is_active=active,
     )
     db.add(product)
@@ -51,6 +51,7 @@ def _order_data(product_id: int, po_no: str | None = None) -> OrderCreate:
         po_no=po_no or f"PO-{uuid4().hex}",
         product_id=product_id,
         ordered_quantity=100,
+        lot_size=30,
         process_type="FULL",
         raw_material_code="RM-01",
         drawing_number="DWG-01",
@@ -75,6 +76,14 @@ def test_create_order_persists_required_data_and_audit() -> None:
 
         assert order.product_id == product.id
         assert order.process_type == "FULL"
+        lots = list(db.scalars(select(ProductionLot).where(ProductionLot.order_id == order.id)))
+        assert [(lot.lot_number, lot.quantity) for lot in lots] == [
+            (1, 30),
+            (2, 30),
+            (3, 30),
+            (4, 10),
+        ]
+        assert len({lot.lot_code for lot in lots}) == 4
         assert order.raw_material_code == "RM-01"
         assert audit.actor_id == actor.id
         assert audit.old_values is None
@@ -118,6 +127,8 @@ def test_order_requires_active_product() -> None:
     [
         ("ordered_quantity", 0),
         ("ordered_quantity", -1),
+        ("lot_size", 0),
+        ("lot_size", -1),
         ("process_type", "OTHER"),
         ("raw_material_code", "  "),
         ("drawing_number", ""),
@@ -159,6 +170,12 @@ def test_update_order_versions_and_audits_changes() -> None:
 
         assert updated.version == version + 1
         assert updated.ordered_quantity == 200
+        active_lot_quantities = db.scalars(
+            select(ProductionLot.quantity).where(
+                ProductionLot.order_id == order.id, ProductionLot.deleted_at.is_(None)
+            )
+        )
+        assert sum(active_lot_quantities) == 200
         assert audit.old_values["ordered_quantity"] == 100
         assert audit.new_values["ordered_quantity"] == 200
         with pytest.raises(ConcurrentOrderChange, match="tải lại"):

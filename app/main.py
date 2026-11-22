@@ -1,4 +1,3 @@
-import secrets
 from datetime import datetime
 from functools import partial
 from typing import Annotated
@@ -16,7 +15,7 @@ from app.core.cloudflare_access import (
     verify_access_token,
 )
 from app.core.config import get_settings
-from app.core.csrf import set_csrf_cookie
+from app.core.csrf import csrf_token_for_request, set_csrf_cookie
 from app.core.db import get_db
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.dependencies import SESSION_COOKIE_NAME, require_active_user
@@ -29,14 +28,24 @@ from app.modules.blank_requests.router import (
     warehouse_router as warehouse_blank_requests_router,
 )
 from app.modules.blank_requests.service import count_blank_requests
+from app.modules.daily_reports.bavia_router import router as bavia_reports_router
+from app.modules.daily_reports.router import router as daily_reports_router
 from app.modules.defects.router import router as defects_router
 from app.modules.downtime.router import router as downtime_router
 from app.modules.employees.router import router as employees_router
+from app.modules.form_templates.router import router as form_templates_router
 from app.modules.health.router import router as health_router
+from app.modules.imports.router import router as master_imports_router
+from app.modules.master_data.router import router as master_data_router
 from app.modules.orders.router import router as orders_router
 from app.modules.products.router import router as products_router
+from app.modules.qc.router import router as qc_router
+from app.modules.repairs.router import router as repairs_router
+from app.modules.reporting.router import audit_router
+from app.modules.reporting.router import router as reporting_router
 from app.modules.schedules.router import router as schedules_router
 from app.modules.schedules.service import list_schedules
+from app.modules.settings.router import router as settings_router
 from app.modules.shifts.router import router as shifts_router
 from app.modules.users.router import router as users_router
 
@@ -60,7 +69,17 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(assets_router)
 app.include_router(employees_router)
+app.include_router(form_templates_router)
+app.include_router(master_imports_router)
+app.include_router(master_data_router)
 app.include_router(defects_router)
+app.include_router(daily_reports_router)
+app.include_router(qc_router)
+app.include_router(bavia_reports_router)
+app.include_router(repairs_router)
+app.include_router(reporting_router)
+app.include_router(audit_router)
+app.include_router(settings_router)
 app.include_router(downtime_router)
 app.include_router(users_router)
 app.include_router(products_router)
@@ -91,6 +110,8 @@ async def security_headers_and_sliding_cookie(request: Request, call_next):
             response = HTMLResponse("Không xác minh được phiên Cloudflare Access.", status_code=403)
     if response is None:
         response = await call_next(request)
+    if not request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "private, no-store"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
         "object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -121,7 +142,7 @@ def home(
     user: Annotated[User, Depends(require_active_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> HTMLResponse:
-    csrf_token = secrets.token_urlsafe(32)
+    csrf_token = csrf_token_for_request(request)
     today = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
     today_schedules = list_schedules(db, start_date=today, end_date=today)
     response = templates.TemplateResponse(

@@ -20,7 +20,10 @@ from app.core.db import Base
 class BlankRequest(Base):
     __tablename__ = "blank_requests"
     __table_args__ = (
-        CheckConstraint("blank_quantity > 0", name="ck_blank_requests_quantity_positive"),
+        CheckConstraint(
+            "blank_quantity IS NULL OR blank_quantity > 0",
+            name="ck_blank_requests_quantity_positive",
+        ),
         CheckConstraint(
             "status IN ('submitted', 'cancelled', 'delivered')",
             name="ck_blank_requests_status",
@@ -30,8 +33,7 @@ class BlankRequest(Base):
             name="ck_blank_requests_delivered_quantity_positive",
         ),
         CheckConstraint(
-            "(status = 'delivered' AND delivered_quantity IS NOT NULL "
-            "AND delivered_at IS NOT NULL AND delivered_by IS NOT NULL) "
+            "(status = 'delivered' AND delivered_at IS NOT NULL AND delivered_by IS NOT NULL) "
             "OR (status <> 'delivered' AND delivered_quantity IS NULL "
             "AND delivered_at IS NULL AND delivered_by IS NULL)",
             name="ck_blank_requests_delivery_matches_status",
@@ -51,9 +53,9 @@ class BlankRequest(Base):
     schedule_id: Mapped[int] = mapped_column(
         ForeignKey("schedules.id", ondelete="RESTRICT"), nullable=False
     )
-    blank_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    machine_group_id: Mapped[int] = mapped_column(
-        ForeignKey("machine_groups.id", ondelete="RESTRICT"), nullable=False
+    blank_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    machine_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("machine_groups.id", ondelete="RESTRICT"), nullable=True
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="submitted")
     delivered_quantity: Mapped[int | None] = mapped_column(Integer)
@@ -90,6 +92,9 @@ class BlankRequestPair(Base):
     )
     machine_pair_id: Mapped[int] = mapped_column(
         ForeignKey("machine_pairs.id", ondelete="RESTRICT"), nullable=False
+    )
+    employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="RESTRICT"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

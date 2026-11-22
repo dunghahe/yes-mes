@@ -24,6 +24,7 @@ services:
         INSTALL_DEV: "true"
     environment:
       APP_ENV: ${APP_ENV:-development}
+      WATCHFILES_FORCE_POLLING: "true"
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       TOTP_ENCRYPTION_KEYS: ${TOTP_ENCRYPTION_KEYS:?Generate and set a Fernet key in .env}
       CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:-}
@@ -32,12 +33,13 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - ./app:/workspace/app
       - ./scripts:/workspace/scripts
       - ./tests:/workspace/tests
       - ./migrations:/workspace/migrations
+      - ./docs/forms:/workspace/docs/forms:ro
       - ./alembic.ini:/workspace/alembic.ini:ro
       - ./pyproject.toml:/workspace/pyproject.toml:ro
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

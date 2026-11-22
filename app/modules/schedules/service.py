@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import AuditLog
@@ -131,6 +131,7 @@ def list_schedules(
     end_date: date | None = None,
     shift_id: int | None = None,
     order_id: int | None = None,
+    query_text: str = "",
     include_deleted: bool = False,
 ):
     query = (
@@ -150,6 +151,15 @@ def list_schedules(
         query = query.where(ProductionSchedule.shift_id == shift_id)
     if order_id is not None:
         query = query.where(ProductionSchedule.order_id == order_id)
+    if query_text.strip():
+        pattern = f"%{query_text.strip()}%"
+        query = query.where(
+            or_(
+                ProductionOrder.po_no.ilike(pattern),
+                Product.code.ilike(pattern),
+                Product.name.ilike(pattern),
+            )
+        )
     return list(db.execute(query))
 
 

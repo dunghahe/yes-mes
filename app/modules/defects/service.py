@@ -64,7 +64,8 @@ def update_defect_code(
     old_values = _values(item)
     item.code = data.code
     item.name = data.name
-    item.defect_group = data.defect_group
+    if "defect_group" in data.model_fields_set:
+        item.defect_group = data.defect_group
     item.detected_at = data.detected_at
     item.is_active = data.is_active
     item.version += 1

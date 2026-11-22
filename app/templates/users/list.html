@@ -7,7 +7,6 @@
     <p class="intro">Tài khoản bị khóa vẫn được giữ để bảo toàn lịch sử. Hệ thống không xóa tài khoản.</p>
     <div class="toolbar">
       <a class="primary-button button-link" href="/admin/users/new">Tạo tài khoản</a>
-      <a class="secondary-button button-link" href="/">Về trang chủ</a>
     </div>
     <div class="table-wrap">
       <table>
@@ -29,5 +28,10 @@
         </tbody>
       </table>
     </div>
+    {% if page_count > 1 %}<nav class="pagination" aria-label="Trang tài khoản">
+      {% if page > 1 %}<a class="secondary-button button-link" href="/admin/users?page={{ page - 1 }}">Trước</a>{% endif %}
+      <span>Trang {{ page }} / {{ page_count }}</span>
+      {% if page < page_count %}<a class="secondary-button button-link" href="/admin/users?page={{ page + 1 }}">Sau</a>{% endif %}
+    </nav>{% endif %}
   </section>
 {% endblock %}

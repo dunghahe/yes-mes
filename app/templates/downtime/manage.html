@@ -5,8 +5,8 @@
     <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
     <h1 id="page-title">Lý do dừng máy</h1>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
-    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
     <p class="helper-text">Danh mục có sẵn: Hỏng máy, Đổi mã, Chờ phôi, Chờ kỹ thuật và Chờ người vận hành.</p>
+    {% set import_resource = 'downtime' %}{% set import_label = 'lý do dừng máy' %}{% include 'imports/upload_card.html' %}
 
     <section class="subsection" aria-labelledby="create-title">
       <h2 id="create-title">Thêm lý do dừng máy</h2>

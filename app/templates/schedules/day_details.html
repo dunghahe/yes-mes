@@ -1,0 +1,16 @@
+{% from 'schedules/_macros.html' import schedule_edit_attributes with context %}
+<p class="schedule-day-count">{{ schedules|length }} lịch</p>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>PO</th><th>Mã hàng</th><th>Kíp</th><th>Số lượng</th></tr></thead>
+    <tbody>
+      {% for item, order, shift, product in schedules %}
+        <tr>
+          <td>{% if can_edit %}<button type="button" data-day-schedule-edit {{ schedule_edit_attributes(item, order, 'schedule-day-order', 'Mở form sửa lịch') }}>{{ order.po_no }}</button>{% else %}<strong>{{ order.po_no }}</strong>{% endif %}</td>
+          <td><span>{{ product.code }}</span><small>{{ product.name }}</small></td>
+          <td>{{ shift.name }}</td><td class="schedule-day-quantity">{{ item.planned_quantity }}</td>
+        </tr>
+      {% else %}<tr><td colspan="4">Ngày này chưa có lịch sản xuất.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

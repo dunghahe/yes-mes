@@ -15,7 +15,7 @@
       {% if errors.get('po_no') %}<p id="po-no-error" class="field-error">{{ errors.get('po_no') }}</p>{% endif %}
 
       <label for="product-id">Mã hàng</label>
-      <select id="product-id" name="product_id" required aria-describedby="product-error">
+      <select id="product-id" name="product_id" required aria-describedby="product-error" data-searchable-select data-autocomplete-label="Mã hàng" data-autocomplete-placeholder="Gõ mã hàng để tìm…">
         <option value="">-- Chọn mã hàng --</option>
         {% if product and not product.is_active %}<option value="{{ product.id }}" selected>{{ product.code }} · {{ product.name }} (ngừng dùng)</option>{% endif %}
         {% for item in products %}
@@ -27,6 +27,11 @@
       <label for="quantity">Tổng số lượng đặt</label>
       <input id="quantity" name="ordered_quantity" type="number" min="1" step="1" required value="{{ submitted.get('ordered_quantity', order.ordered_quantity if order else '') }}" aria-describedby="quantity-error">
       {% if errors.get('ordered_quantity') %}<p id="quantity-error" class="field-error">{{ errors.get('ordered_quantity') }}</p>{% endif %}
+
+      <label for="lot-size">Số lượng mỗi lô</label>
+      <input id="lot-size" name="lot_size" type="number" min="1" step="1" required value="{{ submitted.get('lot_size', order.lot_size if order else '') }}" aria-describedby="lot-size-error">
+      {% if errors.get('lot_size') %}<p id="lot-size-error" class="field-error">{{ errors.get('lot_size') }}</p>{% endif %}
+      <div class="lot-count-preview" data-lot-preview data-quantity-id="quantity" data-size-id="lot-size" aria-live="polite" hidden><strong data-lot-count></strong><span data-lot-breakdown></span></div>
 
       <label for="process-type">Loại công đoạn</label>
       <select id="process-type" name="process_type" required aria-describedby="process-error">
@@ -62,8 +67,8 @@
 
       <label for="notes">Ghi chú</label>
       <textarea id="notes" name="notes" maxlength="2000" rows="3">{{ submitted.get('notes', order.notes if order else '') }}</textarea>
-      <p class="helper-text">Mỗi PO gắn với một mã hàng, không quản lý theo lô. Loại công đoạn được lưu riêng tại PO, không tự đổi theo mặc định của mã hàng.</p>
-      {% if order %}<p class="helper-text">Khi có yêu cầu phôi, không thể đổi mã hàng hoặc loại công đoạn.</p>{% endif %}
+      <p class="helper-text">Một PO có một mã hàng; công đoạn được lưu riêng trên PO.</p>
+      {% if order %}<p class="helper-text">Không đổi số lượng PO hoặc cỡ lô sau khi đã lập lịch hoặc in phiếu lô.</p>{% endif %}
       <button class="primary-button" type="submit">{% if order %}Lưu PO{% else %}Tạo PO{% endif %}</button>
       <a class="secondary-button button-link" href="/orders">Quay lại danh sách</a>
     </form>

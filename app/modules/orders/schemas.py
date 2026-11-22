@@ -12,6 +12,7 @@ class OrderCreate(BaseModel):
     po_no: str = Field(min_length=1, max_length=100)
     product_id: int = Field(gt=0)
     ordered_quantity: int = Field(gt=0)
+    lot_size: int = Field(gt=0)
     process_type: ProcessType
     raw_material_code: str = Field(min_length=1, max_length=100)
     drawing_number: str = Field(min_length=1, max_length=100)

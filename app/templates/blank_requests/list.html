@@ -2,87 +2,86 @@
 
 {% block content %}
   <section class="data-panel" aria-labelledby="page-title">
-    <p class="eyebrow">Kỹ thuật sản xuất · Kho</p>
+    <p class="eyebrow">Kỹ thuật sản xuất · Kho NVL</p>
     <h1 id="page-title">Yêu cầu xuất phôi</h1>
     <div class="toolbar">
-      <a class="secondary-button button-link" href="/">Về trang chủ</a>
-      {% if can_create %}<a class="primary-button button-link" href="/blank-requests/new">Tạo yêu cầu phôi</a>{% endif %}
+      {% if can_create %}<button class="primary-button" type="button" data-open-blank-request>Tạo yêu cầu phôi</button>{% endif %}
     </div>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
 
     {% if can_create %}
-      <form method="get" action="/blank-requests/new" class="form-stack blank-request-picker">
-        <h2>Tạo yêu cầu từ lịch sản xuất</h2>
-        <label for="request-schedule">Dòng lịch sản xuất</label>
-        <select id="request-schedule" name="schedule_id" required>
-          <option value="">-- Chọn ngày, kíp và PO --</option>
-          {% for schedule, order, product, shift in schedule_options %}
-            <option value="{{ schedule.id }}" {% if schedule_id == schedule.id %}selected{% endif %}>{{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }} · {{ order.po_no }} · {{ product.code }} · KH {{ schedule.planned_quantity }}</option>
-          {% endfor %}
-        </select>
-        {% if not schedule_valid %}<p class="field-error">Dòng lịch không còn sử dụng được.</p>{% endif %}
-        <label for="request-group-picker">Nhóm máy</label>
-        <select id="request-group-picker" name="machine_group_id" required>
-          <option value="">-- Chọn nhóm máy --</option>
-          {% for group in group_options %}<option value="{{ group.id }}" {% if group_id == group.id %}selected{% endif %}>{{ group.code }} · {{ group.name }}</option>{% endfor %}
-        </select>
-        <button class="secondary-button" type="submit">Hiện cặp máy</button>
-      </form>
-
-      {% if schedule_id and group_id and schedule_valid %}
-        <form method="post" action="/blank-requests" class="form-stack blank-request-form">
+      <dialog class="modal-panel blank-request-dialog" data-blank-request-dialog aria-labelledby="blank-request-title" aria-modal="true" {% if open_create %}data-auto-open="true"{% endif %}>
+        <header class="modal-header">
+          <h2 id="blank-request-title">Tạo yêu cầu phôi</h2>
+          <button type="button" data-close-blank-request aria-label="Đóng">×</button>
+        </header>
+        <form method="post" action="/blank-requests" class="form-stack modal-form blank-request-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="schedule_id" value="{{ schedule_id }}">
-          <input type="hidden" name="machine_group_id" value="{{ group_id }}">
-          <h2>Thông tin yêu cầu</h2>
-          {% set selected_schedule = namespace(value=none) %}
-          {% for schedule, order, product, shift in schedule_options %}{% if schedule.id == schedule_id %}{% set selected_schedule.value = (schedule, order, product, shift) %}{% endif %}{% endfor %}
-          {% if selected_schedule.value %}
-            {% set schedule, order, product, shift = selected_schedule.value %}
-            <p class="helper-text">PO {{ order.po_no }} · mã hàng {{ product.code }} · {{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }}</p>
-          {% endif %}
-          <label for="blank-quantity">Số lượng phôi</label>
-          <input id="blank-quantity" name="blank_quantity" type="number" min="1" step="1" required value="{{ submitted.get('blank_quantity', '') }}" aria-describedby="quantity-error">
-          {% if errors.get('blank_quantity') %}<p id="quantity-error" class="field-error">{{ errors.get('blank_quantity') }}</p>{% endif %}
-
-          <fieldset class="choice-fieldset">
-            <legend>Chọn cặp máy chạy (ít nhất một cặp)</legend>
-            {% for pair, machine_1, machine_2 in pair_options %}
-              <label><input type="checkbox" name="machine_pair_ids" value="{{ pair.id }}" {% if pair.id in selected_pairs %}checked{% endif %}> {{ machine_1.code }} – {{ machine_2.code }}</label>
-            {% else %}<p>Nhóm này chưa có cặp máy đang được bố trí.</p>{% endfor %}
+          <label for="request-schedule">Lịch sản xuất</label>
+          <select id="request-schedule" name="schedule_id" required data-searchable-select data-autocomplete-label="Lịch sản xuất" data-autocomplete-placeholder="Gõ PO, mã hàng hoặc ngày để tìm…">
+            <option value="">-- Chọn ngày, kíp và PO --</option>
+            {% for schedule, order, product, shift in schedule_options %}
+              <option value="{{ schedule.id }}" data-process-type="{{ order.process_type }}" {% if schedule_id == schedule.id %}selected{% endif %}>{{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }} · {{ order.po_no }} · {{ product.code }} · KH {{ schedule.planned_quantity }}</option>
+            {% endfor %}
+          </select>
+          {% if not schedule_valid %}<p class="field-error">Lịch không còn sử dụng. Chọn lịch khác.</p>{% endif %}
+          {% if not schedule_options %}<p class="field-error">Chưa có lịch sản xuất để tạo yêu cầu.</p>{% endif %}
+          <p class="helper-text" data-assignment-help>Chọn cặp máy và người làm cho từng dòng.</p>
+          <fieldset class="choice-fieldset assignment-fieldset" data-assignment-fieldset>
+            <legend>Cặp máy và người làm</legend>
+            <div class="assignment-list" data-assignment-list>
+              {% for selected_pair, selected_operator in assignment_rows %}
+                <div class="assignment-row" data-assignment-row>
+                  <label for="pair-{{ loop.index }}">Cặp máy</label>
+                  <select id="pair-{{ loop.index }}" name="machine_pair_ids" required data-searchable-select data-autocomplete-label="Cặp máy" data-autocomplete-placeholder="Gõ mã máy để tìm…">
+                    <option value="">-- Chọn cặp máy --</option>
+                    {% for pair, machine_1, machine_2 in pair_options %}<option value="{{ pair.id }}" {% if selected_pair == pair.id %}selected{% endif %}>{{ machine_1.code }} – {{ machine_2.code }}</option>{% endfor %}
+                  </select>
+                  <label for="operator-{{ loop.index }}">Người làm cặp này</label>
+                  <select id="operator-{{ loop.index }}" name="operator_ids" data-employee-autocomplete required>
+                    <option value="">-- Chọn người làm --</option>
+                    {% for employee in operator_options %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if selected_operator == employee.id %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}
+                  </select>
+                  {% if not loop.first %}<button class="secondary-button" type="button" data-remove-assignment>Xóa dòng</button>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <button class="secondary-button" type="button" data-add-assignment>Thêm cặp máy</button>
           </fieldset>
-          {% if errors.get('machine_pair_ids') %}<p class="field-error">{{ errors.get('machine_pair_ids') }}</p>{% endif %}
-
-          <fieldset class="choice-fieldset">
-            <legend>Người vận hành (ít nhất một người)</legend>
-            {% for employee in operator_options %}
-              <label><input type="checkbox" name="operator_ids" value="{{ employee.id }}" {% if employee.id in selected_operators %}checked{% endif %}> {{ employee.code }} · {{ employee.name }}</label>
-            {% else %}<p>Chưa có nhân viên vận hành đang sử dụng.</p>{% endfor %}
-          </fieldset>
-          {% if errors.get('operator_ids') %}<p class="field-error">{{ errors.get('operator_ids') }}</p>{% endif %}
-          <p class="helper-text">Khi gửi, yêu cầu được chuyển ngay sang trạng thái chờ kho giao.</p>
-          <button class="primary-button" type="submit">Gửi yêu cầu phôi</button>
+          {% if errors.get('machine_pair_ids') or errors.get('operator_ids') %}<p class="field-error">{{ errors.get('machine_pair_ids') or errors.get('operator_ids') }}</p>{% endif %}
+          {% if not pair_options or not operator_options %}<p class="field-error" data-resource-warning>Cần có cặp máy và người làm đang hoạt động trước khi tạo yêu cầu.</p>{% endif %}
+          <div class="modal-actions">
+            <button class="primary-button" type="submit" data-create-submit data-has-resources="{{ 'true' if pair_options and operator_options else 'false' }}" {% if not schedule_options %}disabled{% endif %}>Tạo yêu cầu</button>
+            <button class="secondary-button" type="button" data-close-blank-request>Hủy</button>
+          </div>
         </form>
-      {% endif %}
+      </dialog>
     {% endif %}
 
     <h2>Danh sách yêu cầu</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Mã yêu cầu</th><th>Ngày lịch</th><th>PO</th><th>Mã hàng</th><th>Số lượng</th><th>Nhóm máy</th><th>Cặp</th><th>Người vận hành</th><th>Trạng thái</th><th></th></tr></thead>
+        <thead><tr><th>Mã yêu cầu</th><th>Ngày lịch</th><th>PO</th><th>Mã hàng</th><th>Số lượng cần hoàn thành</th><th>Cặp</th><th>Người làm</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>
-          {% for blank_request, schedule, order, product, shift, group in requests %}
+          {% for blank_request, schedule, order, product, shift in requests %}
             {% set pair_ids, operator_ids = request_resources[blank_request.id] %}
             <tr>
               <td>{{ blank_request.req_no }}</td><td>{{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }}</td>
-              <td>{{ order.po_no }}</td><td>{{ product.code }}</td><td>{{ blank_request.blank_quantity }}</td>
-              <td>{{ group.code }} · {{ group.name }}</td><td>{{ pair_ids|length }}</td><td>{{ operator_ids|length }}</td>
-              <td>{{ status_labels[blank_request.status] }}</td>
+              <td>{{ order.po_no }}</td><td>{{ product.code }}</td><td>{{ order.ordered_quantity }}</td>
+              <td>{% if order.process_type == "BAVIA_ONLY" %}—{% else %}{{ pair_ids|length }}{% endif %}</td><td>{% if order.process_type == "BAVIA_ONLY" %}—{% else %}{{ operator_ids|length }}{% endif %}</td>
+              <td><span class="request-status status-{{ blank_request.status }}">{{ status_labels[blank_request.status] }}</span></td>
               <td>{% if can_edit and (blank_request.status == "submitted" or (actor_role == "admin" and blank_request.status == "delivered")) %}<a href="/blank-requests/{{ blank_request.id }}">Mở</a>{% endif %}</td>
             </tr>
-          {% else %}<tr><td colspan="10">Chưa có yêu cầu phôi.</td></tr>{% endfor %}
+          {% else %}<tr><td colspan="9">Chưa có yêu cầu phôi.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
+    {% if page_count > 1 %}<nav class="pagination" aria-label="Trang yêu cầu phôi">
+      {% if page > 1 %}<a class="secondary-button button-link" href="/blank-requests?page={{ page - 1 }}">Trước</a>{% endif %}
+      <span>Trang {{ page }} / {{ page_count }}</span>
+      {% if page < page_count %}<a class="secondary-button button-link" href="/blank-requests?page={{ page + 1 }}">Sau</a>{% endif %}
+    </nav>{% endif %}
   </section>
 {% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='js/blank-request-assignments.js').path }}?v=20261121-2" defer></script>{% endblock %}

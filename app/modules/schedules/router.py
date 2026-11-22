@@ -1,7 +1,7 @@
 import calendar
-import secrets
 from datetime import date, datetime, timedelta
 from typing import Annotated
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Request, status
@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.csrf import csrf_is_valid, set_csrf_cookie
+from app.core.csrf import csrf_is_valid, csrf_token_for_request, set_csrf_cookie
 from app.core.db import get_db
 from app.core.permissions import has_permission, require_permission
 from app.modules.auth.models import User
@@ -49,10 +49,17 @@ def _render(
     anchor: date | None = None,
     shift_filter: int | None = None,
     order_filter: int | None = None,
+    query_text: str = "",
+    selected_day: date | None = None,
+    open_create: bool = False,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
     anchor = anchor or datetime.now(LOCAL_TZ).date()
-    if view not in {"month", "week", "day"}:
+    if view == "day":
+        selected_day = anchor
+    if view in {"day", "week"}:
+        view = "list"
+    elif view not in {"month", "list"}:
         view = "month"
     start_date, end_date, calendar_days, previous, following, calendar_title = _calendar_window(
         view, anchor
@@ -63,18 +70,25 @@ def _render(
         end_date=end_date,
         shift_id=shift_filter,
         order_id=order_filter,
+        query_text=query_text,
     )
     by_date: dict[date, list[tuple]] = {day: [] for day in calendar_days}
     for row in rows:
         by_date[row[0].production_date].append(row)
+    if selected_day not in by_date:
+        selected_day = None
+    visible_rows = by_date[selected_day] if selected_day and view == "list" else rows
     weeks = [calendar_days[i : i + 7] for i in range(0, len(calendar_days), 7)]
-    token = secrets.token_urlsafe(32)
+    token = csrf_token_for_request(request)
     response = templates.TemplateResponse(
         request=request,
         name="schedules/list.html",
         context={
             "title": "Lịch sản xuất",
-            "schedules": rows,
+            "schedules": visible_rows,
+            "week_schedule_count": len(rows),
+            "selected_day": selected_day,
+            "query_text": query_text,
             "calendar_days": calendar_days,
             "calendar_weeks": weeks,
             "schedules_by_date": by_date,
@@ -104,7 +118,8 @@ def _render(
             "schedule": schedule,
             "can_create": actor is not None and _can_schedule_action(db, actor, "create"),
             "can_edit": actor is not None and _can_schedule_action(db, actor, "edit"),
-            "can_create_request": actor is not None and _can_request_action(db, actor),
+            "open_create": open_create,
+            "schedule_base_url": "/schedules",
             "submitted": submitted or {},
             "errors": errors or {},
             "error": error,
@@ -124,7 +139,7 @@ def _calendar_window(view: str, anchor: date):
         previous = following = timedelta(days=1)
         title = anchor.strftime("%d/%m/%Y")
         return start_date, end_date, calendar_days, anchor - previous, anchor + following, title
-    if view == "week":
+    if view in {"week", "list"}:
         start_date = anchor - timedelta(days=anchor.weekday())
         end_date = start_date + timedelta(days=6)
         calendar_days = [start_date + timedelta(days=i) for i in range(7)]
@@ -170,20 +185,6 @@ def _can_schedule_action(db: Session, actor: User, action: str) -> bool:
     return has_permission(actor.role, "schedules", action, extras)
 
 
-def _can_request_action(db: Session, actor: User) -> bool:
-    extras = frozenset(
-        (permission.module, "create")
-        for permission in db.scalars(
-            select(UserPermission).where(
-                UserPermission.user_id == actor.id,
-                UserPermission.deleted_at.is_(None),
-            )
-        )
-        if permission.can_create
-    )
-    return has_permission(actor.role, "blank_requests", "create", extras)
-
-
 def _schema_errors(error: ValidationError) -> dict[str, str]:
     mapping = {
         "production_dates": "Chọn ít nhất một ngày, không chọn trùng và tối đa 62 ngày mỗi lần.",
@@ -209,7 +210,19 @@ def schedules_page(
     on: date | None = None,
     shift_id: int | None = None,
     order_id: int | None = None,
+    edit: int | None = None,
+    q: str = "",
+    day: date | None = None,
 ) -> HTMLResponse:
+    schedule = None
+    if edit is not None:
+        if not _can_schedule_action(db, actor, "edit"):
+            return Response("Bạn không có quyền sửa lịch.", status_code=403)
+        row = get_schedule(db, edit)
+        if row is None:
+            return Response("Không tìm thấy dòng lịch.", status_code=404)
+        schedule = row[0]
+        on = on or schedule.production_date
     return _render(
         request,
         db,
@@ -218,6 +231,56 @@ def schedules_page(
         anchor=on,
         shift_filter=shift_id,
         order_filter=order_id,
+        query_text=q.strip(),
+        selected_day=day,
+        schedule=schedule,
+        open_create=schedule is not None,
+    )
+
+
+@router.get("/day-details", response_class=HTMLResponse)
+def schedule_day_details(
+    request: Request,
+    actor: Annotated[User, Depends(require_permission("schedules", "view"))],
+    db: Annotated[Session, Depends(get_db)],
+    on: date,
+    shift_id: int | None = None,
+    order_id: int | None = None,
+    q: str = "",
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="schedules/day_details.html",
+        context={
+            "schedules": list_schedules(
+                db,
+                start_date=on,
+                end_date=on,
+                shift_id=shift_id,
+                order_id=order_id,
+                query_text=q.strip(),
+            ),
+            "can_edit": _can_schedule_action(db, actor, "edit"),
+        },
+    )
+
+
+@router.get("/manage", include_in_schema=False)
+def manage_schedules_page(
+    view: str = "month",
+    on: date | None = None,
+    shift_id: int | None = None,
+    order_id: int | None = None,
+) -> Response:
+    values = {"view": view}
+    if on:
+        values["on"] = on.isoformat()
+    if shift_id:
+        values["shift_id"] = shift_id
+    if order_id:
+        values["order_id"] = order_id
+    return RedirectResponse(
+        f"/schedules?{urlencode(values)}", status_code=status.HTTP_307_TEMPORARY_REDIRECT
     )
 
 
@@ -231,9 +294,21 @@ def create_schedule_submit(
     planned_quantity: Annotated[int, Form()],
     actor: Annotated[User, Depends(require_permission("schedules", "create"))],
     db: Annotated[Session, Depends(get_db)],
+    form_mode: Annotated[str, Form()] = "create",
+    return_view: Annotated[str, Form()] = "month",
+    return_on: Annotated[date | None, Form()] = None,
+    return_shift_id: Annotated[int | None, Form()] = None,
+    return_order_id: Annotated[int | None, Form()] = None,
+    return_query: Annotated[str, Form()] = "",
+    return_day: Annotated[date | None, Form()] = None,
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
         return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
+    if form_mode != "create":
+        return Response(
+            "Form đang ở chế độ sửa. Hãy mở lại lịch cần sửa; hệ thống chưa tạo thêm lịch.",
+            status_code=409,
+        )
     submitted = {
         "production_dates": [item.isoformat() for item in production_dates],
         "shift_id": shift_id,
@@ -254,6 +329,13 @@ def create_schedule_submit(
             submitted=submitted,
             errors=_schema_errors(exc),
             status_code=422,
+            open_create=True,
+            view=return_view,
+            anchor=return_on,
+            shift_filter=return_shift_id,
+            order_filter=return_order_id,
+            query_text=return_query,
+            selected_day=return_day,
         )
     except (ScheduleManagementError, IntegrityError) as exc:
         db.rollback()
@@ -261,11 +343,38 @@ def create_schedule_submit(
             str(exc) if isinstance(exc, ScheduleManagementError) else "Dữ liệu lịch không hợp lệ."
         )
         return _render(
-            request, db, actor=actor, submitted=submitted, error=message, status_code=422
+            request,
+            db,
+            actor=actor,
+            submitted=submitted,
+            error=message,
+            status_code=422,
+            open_create=True,
+            view=return_view,
+            anchor=return_on,
+            shift_filter=return_shift_id,
+            order_filter=return_order_id,
+            query_text=return_query,
+            selected_day=return_day,
         )
-    message = f"Đã lưu {len(schedules)} dòng lịch."
-    warning = "Tổng kế hoạch của PO vượt số lượng đặt." if exceeds_order else None
-    return _render(request, db, actor=actor, warning=warning or message)
+    messages = [f"Đã lưu {len(schedules)} dòng lịch."]
+    if exceeds_order:
+        messages.append("Tổng kế hoạch của PO vượt số lượng đặt.")
+    if any(item < datetime.now(LOCAL_TZ).date() for item in production_dates):
+        messages.append("Có lịch thuộc ngày đã qua; hãy rà soát lại dữ liệu.")
+    warning = " ".join(messages)
+    return _render(
+        request,
+        db,
+        actor=actor,
+        warning=warning,
+        view=return_view,
+        anchor=return_on,
+        shift_filter=return_shift_id,
+        order_filter=return_order_id,
+        query_text=return_query,
+        selected_day=return_day,
+    )
 
 
 @router.get("/{schedule_id}", response_class=HTMLResponse)
@@ -278,7 +387,10 @@ def edit_schedule_page(
     row = get_schedule(db, schedule_id)
     if row is None:
         return Response("Không tìm thấy dòng lịch.", status_code=404)
-    return _render(request, db, actor=actor, schedule=row[0])
+    query = urlencode(
+        {"view": "day", "on": row[0].production_date.isoformat(), "edit": schedule_id}
+    )
+    return RedirectResponse(f"/schedules?{query}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{schedule_id}", response_class=HTMLResponse)
@@ -293,6 +405,12 @@ def update_schedule_submit(
     version: Annotated[int, Form()],
     actor: Annotated[User, Depends(require_permission("schedules", "edit"))],
     db: Annotated[Session, Depends(get_db)],
+    return_view: Annotated[str, Form()] = "month",
+    return_on: Annotated[date | None, Form()] = None,
+    return_shift_id: Annotated[int | None, Form()] = None,
+    return_order_id: Annotated[int | None, Form()] = None,
+    return_query: Annotated[str, Form()] = "",
+    return_day: Annotated[date | None, Form()] = None,
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
         return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
@@ -310,13 +428,22 @@ def update_schedule_submit(
         db.commit()
     except ValidationError as exc:
         db.rollback()
+        row = get_schedule(db, schedule_id)
         return _render(
             request,
             db,
             actor=actor,
+            schedule=row[0] if row else None,
             submitted={key: str(value) for key, value in values.items()},
             errors=_schema_errors(exc),
             status_code=422,
+            open_create=True,
+            view=return_view,
+            anchor=return_on,
+            shift_filter=return_shift_id,
+            order_filter=return_order_id,
+            query_text=return_query,
+            selected_day=return_day,
         )
     except (ScheduleManagementError, IntegrityError) as exc:
         db.rollback()
@@ -329,13 +456,35 @@ def update_schedule_submit(
             db,
             actor=actor,
             schedule=row[0] if row else None,
+            submitted={key: str(value) for key, value in values.items()},
             error=message,
             status_code=422,
+            open_create=True,
+            view=return_view,
+            anchor=return_on,
+            shift_filter=return_shift_id,
+            order_filter=return_order_id,
+            query_text=return_query,
+            selected_day=return_day,
         )
-    warning = (
-        "Tổng kế hoạch của PO vượt số lượng đặt." if exceeds_order else "Đã cập nhật dòng lịch."
+    messages = ["Đã cập nhật dòng lịch."]
+    if exceeds_order:
+        messages.append("Tổng kế hoạch của PO vượt số lượng đặt.")
+    if production_date < datetime.now(LOCAL_TZ).date():
+        messages.append("Ngày lịch đã qua; hãy rà soát lại dữ liệu.")
+    warning = " ".join(messages)
+    return _render(
+        request,
+        db,
+        actor=actor,
+        warning=warning,
+        view=return_view,
+        anchor=return_on,
+        shift_filter=return_shift_id,
+        order_filter=return_order_id,
+        query_text=return_query,
+        selected_day=return_day,
     )
-    return _render(request, db, actor=actor, warning=warning)
 
 
 @router.post("/{schedule_id}/delete", response_class=HTMLResponse)
@@ -346,6 +495,12 @@ def delete_schedule_submit(
     confirm_delete: Annotated[str, Form()],
     actor: Annotated[User, Depends(require_permission("schedules", "edit"))],
     db: Annotated[Session, Depends(get_db)],
+    return_view: Annotated[str, Form()] = "month",
+    return_on: Annotated[date | None, Form()] = None,
+    return_shift_id: Annotated[int | None, Form()] = None,
+    return_order_id: Annotated[int | None, Form()] = None,
+    return_query: Annotated[str, Form()] = "",
+    return_day: Annotated[date | None, Form()] = None,
 ) -> Response:
     if not csrf_is_valid(request, csrf_token):
         return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
@@ -356,5 +511,33 @@ def delete_schedule_submit(
         db.commit()
     except ScheduleManagementError as exc:
         db.rollback()
-        return _render(request, db, actor=actor, error=str(exc), status_code=404)
-    return RedirectResponse("/schedules", status_code=status.HTTP_303_SEE_OTHER)
+        row = get_schedule(db, schedule_id)
+        return _render(
+            request,
+            db,
+            actor=actor,
+            schedule=row[0] if row else None,
+            error=str(exc),
+            status_code=404,
+            open_create=row is not None,
+            view=return_view,
+            anchor=return_on,
+            shift_filter=return_shift_id,
+            order_filter=return_order_id,
+            query_text=return_query,
+            selected_day=return_day,
+        )
+    query_values = {"view": return_view}
+    if return_on:
+        query_values["on"] = return_on.isoformat()
+    if return_shift_id:
+        query_values["shift_id"] = return_shift_id
+    if return_order_id:
+        query_values["order_id"] = return_order_id
+    if return_query:
+        query_values["q"] = return_query
+    if return_day:
+        query_values["day"] = return_day.isoformat()
+    return RedirectResponse(
+        f"/schedules?{urlencode(query_values)}", status_code=status.HTTP_303_SEE_OTHER
+    )

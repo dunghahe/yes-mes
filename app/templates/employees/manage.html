@@ -5,7 +5,7 @@
     <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
     <h1 id="page-title">Quản lý nhân viên</h1>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
-    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
+    {% set import_resource = 'employees' %}{% set import_label = 'nhân viên' %}{% include 'imports/upload_card.html' %}
 
     <section class="subsection" aria-labelledby="create-title">
       <h2 id="create-title">Thêm nhân viên</h2>

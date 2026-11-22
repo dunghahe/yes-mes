@@ -1,4 +1,3 @@
-import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request, status
@@ -8,22 +7,17 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.csrf import csrf_is_valid, set_csrf_cookie
+from app.core.csrf import csrf_is_valid, csrf_token_for_request, set_csrf_cookie
 from app.core.db import get_db
 from app.core.permissions import require_admin
-from app.modules.assets.schemas import GroupInput, GroupUpdate, MachineInput, MachineUpdate
+from app.modules.assets.schemas import MachineInput, MachineUpdate
 from app.modules.assets.service import (
     AssetManagementError,
-    assign_pair_group,
-    create_group,
     create_machine,
     create_pair,
-    list_active_groups,
     list_active_machines,
-    list_groups,
     list_machines,
     list_pairs,
-    update_group,
     update_machine,
     update_pair_status,
 )
@@ -34,16 +28,14 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 def _render(request: Request, db: Session, error: str | None = None) -> HTMLResponse:
-    token = secrets.token_urlsafe(32)
+    token = csrf_token_for_request(request)
     response = templates.TemplateResponse(
         request=request,
         name="assets/manage.html",
         context={
-            "title": "Máy, cặp và nhóm máy",
+            "title": "Máy và cặp máy",
             "machines": list_machines(db),
             "active_machines": list_active_machines(db),
-            "groups": list_groups(db),
-            "active_groups": list_active_groups(db),
             "pairs": list_pairs(db),
             "error": error,
             "csrf_token": token,
@@ -98,26 +90,6 @@ def add_machine(
     return RedirectResponse("/admin/machines", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/groups")
-def add_group(
-    request: Request,
-    csrf_token: Annotated[str, Form()],
-    code: Annotated[str, Form()],
-    name: Annotated[str, Form()],
-    actor: Annotated[User, Depends(require_admin)],
-    db: Annotated[Session, Depends(get_db)],
-) -> Response:
-    if not _csrf_error(request, csrf_token):
-        return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
-    try:
-        create_group(db, GroupInput(code=code, name=name), actor.id)
-        db.commit()
-    except (ValidationError, AssetManagementError, IntegrityError) as exc:
-        db.rollback()
-        return _render(request, db, _form_error(exc))
-    return RedirectResponse("/admin/machines", status_code=status.HTTP_303_SEE_OTHER)
-
-
 @router.post("/pairs")
 def add_pair(
     request: Request,
@@ -131,26 +103,6 @@ def add_pair(
         return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
     try:
         create_pair(db, machine_1_id, machine_2_id, actor.id)
-        db.commit()
-    except (AssetManagementError, IntegrityError) as exc:
-        db.rollback()
-        return _render(request, db, _form_error(exc))
-    return RedirectResponse("/admin/machines", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.post("/pairs/{pair_id}/group")
-def change_pair_group(
-    request: Request,
-    pair_id: int,
-    csrf_token: Annotated[str, Form()],
-    actor: Annotated[User, Depends(require_admin)],
-    db: Annotated[Session, Depends(get_db)],
-    machine_group_id: Annotated[int | None, Form()] = None,
-) -> Response:
-    if not _csrf_error(request, csrf_token):
-        return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
-    try:
-        assign_pair_group(db, pair_id, machine_group_id, actor.id)
         db.commit()
     except (AssetManagementError, IntegrityError) as exc:
         db.rollback()
@@ -184,34 +136,6 @@ def edit_machine(
                 is_active=is_active,
                 version=version,
             ),
-            actor.id,
-        )
-        db.commit()
-    except (ValidationError, AssetManagementError, IntegrityError) as exc:
-        db.rollback()
-        return _render(request, db, _form_error(exc))
-    return RedirectResponse("/admin/machines", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.post("/groups/{group_id}")
-def edit_group(
-    request: Request,
-    group_id: int,
-    csrf_token: Annotated[str, Form()],
-    code: Annotated[str, Form()],
-    name: Annotated[str, Form()],
-    actor: Annotated[User, Depends(require_admin)],
-    db: Annotated[Session, Depends(get_db)],
-    is_active: Annotated[bool, Form()] = False,
-    version: Annotated[int, Form()] = 1,
-) -> Response:
-    if not _csrf_error(request, csrf_token):
-        return Response("Phiên biểu mẫu không hợp lệ.", status_code=403)
-    try:
-        update_group(
-            db,
-            group_id,
-            GroupUpdate(code=code, name=name, is_active=is_active, version=version),
             actor.id,
         )
         db.commit()

@@ -5,8 +5,8 @@
     <p class="eyebrow">Dữ liệu dùng chung · Admin</p>
     <h1 id="page-title">Quản lý kíp</h1>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
-    <div class="toolbar"><a class="secondary-button button-link" href="/">Về trang chủ</a></div>
     <p class="helper-text">Ngày sản xuất của kíp qua nửa đêm là ngày kíp bắt đầu.</p>
+    {% set import_resource = 'shifts' %}{% set import_label = 'ca/kíp' %}{% include 'imports/upload_card.html' %}
 
     <section class="subsection" aria-labelledby="create-title">
       <h2 id="create-title">Thêm kíp</h2>

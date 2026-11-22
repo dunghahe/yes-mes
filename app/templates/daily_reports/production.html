@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel daily-report-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Sản xuất</p>
+    <h1 id="page-title">{% if report_read_only %}Xem báo cáo{% elif editing_report %}Sửa báo cáo{% else %}Nhập sản lượng{% endif %}</h1>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    {% if success %}<p class="success-message" role="status">{{ success }}</p>{% endif %}
+    {% for message in errors %}<p class="field-error" role="alert">{{ message }}</p>{% endfor %}
+    {% for message in warnings %}<p class="warning-message" role="status">{{ message }}</p>{% endfor %}
+
+    <div class="entry-workbench">
+    {% if can_view %}
+      <aside class="record-search-panel" aria-label="Tìm báo cáo sản lượng">
+        <h2>Tìm báo cáo</h2>
+        <form method="get" action="/daily-reports" class="form-stack report-search-form">
+          <input type="hidden" name="mode" value="{{ mode }}">
+          <label for="request-number">Mã yêu cầu</label>
+          <div class="lookup-row">
+            <input id="request-number" name="request_number" value="{{ request_number }}" placeholder="Quét hoặc nhập mã yêu cầu" autocomplete="off" autocapitalize="characters" spellcheck="false">
+            <button class="secondary-button" type="submit">Mở</button>
+          </div>
+          <label for="report-date-filter">Ngày</label>
+          <input id="report-date-filter" name="production_date" type="date" value="{{ production_date_filter.isoformat() }}">
+          <label for="report-shift-filter">Kíp</label>
+          <select id="report-shift-filter" name="shift_id"><option value="">Tất cả kíp</option>{% for shift in shift_options %}<option value="{{ shift.id }}" {% if shift_filter_id == shift.id %}selected{% endif %}>{{ shift.name }}</option>{% endfor %}</select>
+          <label for="report-po-filter">PO</label>
+          <div class="suggestion-input-wrap">
+            <input id="report-po-filter" name="po_query" value="{{ po_query }}" placeholder="Gõ mã PO để tìm…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="report-po-suggestions" data-po-suggest>
+            <div id="report-po-suggestions" class="search-suggestions" role="listbox" aria-label="Gợi ý PO" hidden></div>
+          </div>
+          <button class="primary-button" type="submit">Tìm danh sách</button>
+        </form>
+        {% if request_number and not request_row %}<p class="field-error" role="alert">Không tìm thấy mã yêu cầu phôi đang sử dụng.</p>{% endif %}
+        <div class="record-result-list">
+          {% for blank_request, schedule, order, product, shift, report in report_requests %}
+            <a class="record-result-card {% if request_row and request_row[0].id == blank_request.id %}is-selected{% endif %}" href="/daily-reports?request_number={{ blank_request.req_no }}&amp;mode={{ mode }}" {% if request_row and request_row[0].id == blank_request.id %}aria-current="true"{% endif %}>
+              <span><strong>{{ order.po_no }}</strong><small>{{ schedule.production_date.strftime('%d/%m/%Y') }} · {{ shift.name }} · {{ blank_request.req_no }}</small></span>
+              <span class="record-result-statuses">
+                {% if order.process_type != 'BAVIA_ONLY' %}<span class="record-status {% if report %}is-done{% else %}is-pending{% endif %}">SX · {{ 'Đã nhập' if report else 'Chưa nhập' }}</span>{% endif %}
+                {% if order.process_type in ('FULL', 'BAVIA_ONLY') %}<span class="record-status {% if blank_request.id in bavia_request_ids %}is-done{% else %}is-pending{% endif %}">Bavia · {{ 'Đã nhập' if blank_request.id in bavia_request_ids else 'Chưa nhập' }}</span>{% endif %}
+              </span>
+            </a>
+          {% else %}<p class="helper-text">Không có yêu cầu phù hợp.</p>{% endfor %}
+        </div>
+      </aside>
+    {% endif %}
+
+    <div class="record-entry-panel">
+      {% if request_row and (can_create or can_edit or existing_report_id) %}
+        {% set blank_request, schedule, order, product, default_shift = request_row %}
+        <div class="report-paper-header">
+          <div><span>Mã yêu cầu</span><strong>{{ blank_request.req_no }}</strong></div>
+          <div><span>PO</span><strong>{{ order.po_no }}</strong></div>
+          <div><span>Mã hàng</span><strong>{{ product.code }} · {{ product.name }}</strong></div>
+          <div><span>Ngày SX</span><strong>{{ schedule.production_date.strftime('%d/%m/%Y') }}</strong></div>
+          <div><span>Số lượng PO</span><strong>{{ order.ordered_quantity }}</strong></div>
+        </div>
+        {% if order.process_type == 'FULL' %}
+          <nav class="report-mode-tabs" aria-label="Chọn công đoạn sản lượng">
+            <a href="/daily-reports?request_number={{ blank_request.req_no }}&amp;mode=production" {% if mode != 'bavia' %}aria-current="page"{% endif %}>Sản xuất</a>
+            <a href="/daily-reports?request_number={{ blank_request.req_no }}&amp;mode=bavia" {% if mode == 'bavia' %}aria-current="page"{% endif %}>Bavia</a>
+          </nav>
+        {% endif %}
+        {% if order.process_type in ('FULL', 'BAVIA_ONLY') and (order.process_type == 'BAVIA_ONLY' or mode == 'bavia') %}
+          <section class="bavia-entry-panel" aria-labelledby="bavia-entry-title">
+            <h2 id="bavia-entry-title">{% if bavia_form.get('report_id') %}Sửa sản lượng Bavia{% else %}Sản lượng Bavia{% endif %}</h2>
+            {% if order.process_type == 'FULL' %}<p class="helper-text">Ghi số lượng Bavia của PO, không nhập theo máy.</p>{% endif %}
+            {% if can_save_bavia %}
+              <form method="post" action="/daily-reports/bavia" class="form-stack bavia-entry-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="request_number" value="{{ blank_request.req_no }}">
+                <input type="hidden" name="report_id" value="{{ bavia_form.get('report_id', '') }}">
+                <input type="hidden" name="version" value="{{ bavia_form.get('version', '0') }}">
+                <div class="bavia-entry-fields">
+                  <label>Ngày Bavia<input type="date" name="report_date" value="{{ bavia_form.get('report_date', schedule.production_date.isoformat()) }}" required></label>
+                  <label>Kíp<select name="shift_id" required>{% for item in shift_options %}<option value="{{ item.id }}" {% if bavia_form.get('shift_id', default_shift.id|string) == item.id|string %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>
+                  <label>Người làm<select name="employee_id" data-employee-autocomplete required><option value="">-- Chọn người làm --</option>{% for employee in workers %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if bavia_form.get('employee_id') == employee.id|string %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}</select></label>
+                  <label>Sản lượng Bavia<input type="number" name="quantity_produced" min="0" step="1" value="{{ bavia_form.get('quantity_produced', '') }}" required></label>
+                </div>
+                <button class="primary-button" type="submit">{% if bavia_form.get('report_id') %}Lưu thay đổi{% else %}Lưu Bavia{% endif %}</button>
+              </form>
+            {% else %}<p class="helper-text">Tài khoản của bạn chỉ có quyền xem báo cáo.</p>{% endif %}
+            {% if bavia_reports %}
+              <div class="table-wrap bavia-report-history">
+                <table><thead><tr><th>Ngày</th><th>Kíp</th><th>Người làm</th><th>Sản lượng</th><th></th></tr></thead>
+                  <tbody>{% for item in bavia_reports %}<tr><td>{{ item.report_date }}</td><td>{{ item.shift }}</td><td>{{ item.employee_name }}</td><td>{{ item.quantity_produced }}</td><td>{% if item.qc %}<span class="helper-text">Đã QC</span>{% elif can_edit %}<a href="/daily-reports?request_number={{ blank_request.req_no }}&amp;mode=bavia&amp;bavia_id={{ item.id }}">Sửa</a>{% endif %}</td></tr>{% endfor %}</tbody>
+                </table>
+              </div>
+            {% endif %}
+          </section>
+        {% else %}
+        {% if existing_report_id and not editing_report %}
+          <p class="form-error" role="status">Yêu cầu này đã có báo cáo sản lượng.</p>
+          {% if not can_edit %}<p class="helper-text">Tài khoản của bạn có thể xem nhưng chưa được cấp quyền sửa báo cáo.</p>{% endif %}
+        {% elif not assignments %}
+          <p class="form-error" role="alert">Yêu cầu phôi chưa có cặp máy; chưa thể tạo báo cáo sản lượng.</p>
+        {% else %}
+          <form method="post" action="{% if editing_report %}/daily-reports/{{ editing_report.id }}{% else %}/daily-reports{% endif %}" class="form-stack daily-production-form" data-daily-report-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="request_number" value="{{ blank_request.req_no }}">
+            <input type="hidden" data-blank-request-id value="{{ blank_request.id }}">
+            {% if editing_report %}<input type="hidden" name="version" value="{{ editing_report.version }}">{% endif %}
+            <input type="hidden" name="report_payload" value="{{ production_form_payload }}">
+            <section class="report-shift-block" data-shift-block aria-label="Nhập sản lượng theo ca/kíp">
+              <div class="report-shift-heading">
+                <h2>Sản lượng theo cặp máy</h2>
+                <div class="report-period-controls">
+                  <label for="report-date">Ngày sản xuất<input id="report-date" type="date" data-report-date value="{{ report_date.isoformat() }}" required {% if report_read_only %}disabled{% endif %}></label>
+                  <label>Ca/kíp
+                    <select data-shift-id data-shift-minutes="{{ shift_minutes[default_shift.id] }}" required {% if report_read_only %}disabled{% endif %}>
+                      {% for item in shift_options %}<option value="{{ item.id }}" data-minutes="{{ shift_minutes[item.id] }}" {% if editing_report and item.id == edit_shift_id %}selected{% elif not editing_report and item.id == default_shift.id %}selected{% endif %}>{{ item.name }} ({{ item.start_time.strftime('%H:%M') }}–{{ item.end_time.strftime('%H:%M') }})</option>{% endfor %}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="report-pair-list" data-report-pair-list>
+                {% for pair, worker in assignments %}
+                  {% set saved_pair = edit_values.get(pair[0].id) %}
+                  <section class="report-pair-card" data-report-pair-card data-source-machine-pair-id="{{ pair[0].id }}">
+                    <div class="report-machine-heading"><h3>Cặp máy · {{ pair[1].code }} – {{ pair[2].code }}</h3></div>
+                    <input type="hidden" data-pair-id value="{{ pair[0].id }}">
+                    <div class="report-pair-fields">
+                      <label>Người làm<select data-employee-autocomplete data-employee-id required {% if report_read_only %}disabled{% endif %}><option value="">-- Chọn người làm --</option>{% for employee in workers %}<option value="{{ employee.id }}" data-search-text="{{ employee.code }} {{ employee.name }}" data-employee-type="{{ employee.employee_type }}" {% if saved_pair and saved_pair.report_pair.employee_id == employee.id %}selected{% elif not editing_report and worker and worker.id == employee.id %}selected{% endif %}>{{ employee.code }} · {{ employee.name }}</option>{% endfor %}</select></label>
+                      <label>Sản lượng trong ca<input type="number" min="0" step="1" data-quantity value="{{ saved_pair.quantity if saved_pair else 0 }}" required {% if report_read_only %}disabled{% endif %}></label>
+                    </div>
+                    <details class="report-optional-section {% if saved_pair and (saved_pair.downtime_recorded or saved_pair.downtime) %}has-downtime-record{% endif %}" {% if saved_pair and (saved_pair.downtime_recorded or saved_pair.downtime) %}open{% endif %}>
+                      <summary>Thời gian dừng máy</summary>
+                      <label class="checkbox-label"><input type="checkbox" data-downtime-recorded {% if saved_pair and saved_pair.downtime_recorded %}checked{% endif %} {% if report_read_only %}disabled{% endif %}> Biểu giấy có mục dừng (kể cả 0)</label>
+                      <div data-downtime-list>{% if saved_pair %}{% for entry in saved_pair.downtime %}<div class="report-entry-row downtime-entry-row"><label>Lý do dừng<select data-reason-id required {% if report_read_only %}disabled{% endif %}><option value="">-- Chọn lý do --</option>{% for reason in downtime_reasons %}<option value="{{ reason.id }}" {% if entry.downtime_reason_id == reason.id %}selected{% endif %}>{{ reason.code }} · {{ reason.name }}</option>{% endfor %}</select></label><label>Phút dừng<input type="number" min="1" step="1" data-downtime-minutes value="{{ entry.minutes }}" required {% if report_read_only %}disabled{% endif %}></label>{% if not report_read_only %}<button class="secondary-button" type="button" data-remove-entry>Xóa</button>{% endif %}</div>{% endfor %}{% endif %}</div>
+                      <template data-downtime-template><div class="report-entry-row downtime-entry-row"><label>Lý do dừng<select data-reason-id required><option value="">-- Chọn lý do --</option>{% for reason in downtime_reasons %}<option value="{{ reason.id }}">{{ reason.code }} · {{ reason.name }}</option>{% endfor %}</select></label><label>Phút dừng<input type="number" min="1" step="1" data-downtime-minutes required></label><button class="secondary-button" type="button" data-remove-entry>Xóa</button></div></template>
+                      {% if not report_read_only %}<div class="report-downtime-actions"><button class="secondary-button" type="button" data-add-downtime>Thêm lý do dừng</button></div>{% endif %}
+                    </details>
+                  </section>
+                {% endfor %}
+              </div>
+            </section>
+            {% if not report_read_only %}<button class="primary-button" type="submit">{% if editing_report %}Lưu thay đổi{% else %}Lưu sản lượng{% endif %}</button>{% endif %}
+          </form>
+
+        {% endif %}
+        {% endif %}
+      {% endif %}
+      {% if not request_row %}<div class="record-entry-empty"><h2>Chọn yêu cầu để nhập sản lượng</h2><p>Tìm theo ngày, kíp, PO hoặc quét mã yêu cầu.</p></div>{% endif %}
+    </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='js/daily-report-form.js').path }}?v=20261122-3" defer></script>{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel report-dashboard" aria-labelledby="page-title">
+    <p class="eyebrow">Quản trị</p>
+    <h1 id="page-title">Nhật ký hệ thống</h1>
+    <form method="get" action="/audit-log/view" class="report-filter-panel">
+      <div class="report-filter-grid">
+        <label>Từ ngày<input type="date" name="date_from" value="{{ date_from }}"></label>
+        <label>Đến ngày<input type="date" name="date_to" value="{{ date_to }}"></label>
+        <label>Loại dữ liệu<select name="table_name"><option value="">Tất cả</option>{% for item in table_names %}<option value="{{ item }}" {% if table_name == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+        <label>Người thực hiện<select name="actor_id" data-searchable-select data-autocomplete-label="Người thực hiện" data-autocomplete-placeholder="Gõ tên để tìm…"><option value="">Tất cả</option>{% for item in actors %}<option value="{{ item.id }}" {% if actor_id == item.id %}selected{% endif %}>{{ item.display_name }} · {{ item.username }}</option>{% endfor %}</select></label>
+        <label>Số dòng<select name="limit">{% for value in [50, 100, 250, 500] %}<option value="{{ value }}" {% if limit == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="report-filter-actions"><button class="primary-button" type="submit">Lọc</button><a class="secondary-button" href="/audit-log/view">Xóa lọc</a></div>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Thao tác</th><th>Dữ liệu</th><th>Bản ghi</th><th>Chi tiết</th></tr></thead>
+        <tbody>
+          {% for record in records %}
+            <tr>
+              <td>{{ record.created_at.strftime('%d/%m/%Y %H:%M') }}</td><td>{{ actor_names.get(record.actor_id, 'ID ' ~ record.actor_id) }}</td><td>{{ record.action }}</td><td>{{ record.table_name }}</td><td>{{ record.record_id }}</td>
+              <td><details class="audit-change"><summary>Xem</summary><div class="audit-value-grid"><section><h3>Trước</h3><pre>{{ record.old_values|tojson(indent=2) }}</pre></section><section><h3>Sau</h3><pre>{{ record.new_values|tojson(indent=2) }}</pre></section>{% if record.reason %}<p><strong>Lý do:</strong> {{ record.reason }}</p>{% endif %}</div></details></td>
+            </tr>
+          {% else %}<tr><td colspan="6">Chưa có nhật ký theo bộ lọc.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="report-row-count">Hiển thị tối đa {{ limit }} dòng</p>
+  </section>
+{% endblock %}

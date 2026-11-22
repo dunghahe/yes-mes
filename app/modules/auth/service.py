@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 
 import bcrypt
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -81,13 +81,11 @@ def resolve_login_session(
     current_time = now or datetime.now(UTC)
     token_hash = sha256(raw_token.encode("utf-8")).hexdigest()
     session = db.scalar(
-        select(LoginSession)
-        .where(
+        select(LoginSession).where(
             LoginSession.token_hash == token_hash,
             LoginSession.revoked_at.is_(None),
             LoginSession.expires_at > current_time,
         )
-        .with_for_update()
     )
     if session is None:
         return None
@@ -103,10 +101,39 @@ def resolve_login_session(
         session.revoked_at = current_time
         return None
 
-    session.last_seen_at = current_time
-    session.expires_at = current_time + timedelta(
-        minutes=get_settings().session_idle_timeout_minutes
-    )
+    if session.last_seen_at <= current_time - timedelta(minutes=2):
+        result = db.execute(
+            update(LoginSession)
+            .where(
+                LoginSession.id == session.id,
+                LoginSession.revoked_at.is_(None),
+                LoginSession.expires_at > current_time,
+                LoginSession.last_seen_at <= current_time - timedelta(minutes=2),
+            )
+            .values(
+                last_seen_at=current_time,
+                expires_at=current_time
+                + timedelta(minutes=get_settings().session_idle_timeout_minutes),
+            )
+        )
+        if result.rowcount != 1:
+            refreshed_session = db.scalar(
+                select(LoginSession)
+                .where(
+                    LoginSession.token_hash == token_hash,
+                    LoginSession.revoked_at.is_(None),
+                    LoginSession.expires_at > current_time,
+                )
+                .execution_options(populate_existing=True)
+            )
+            if refreshed_session is None:
+                return None
+            session = refreshed_session
+        else:
+            session.last_seen_at = current_time
+            session.expires_at = current_time + timedelta(
+                minutes=get_settings().session_idle_timeout_minutes
+            )
     return user, session
 
 

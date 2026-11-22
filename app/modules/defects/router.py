@@ -1,4 +1,3 @@
-import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request, status
@@ -8,7 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.csrf import csrf_is_valid, set_csrf_cookie
+from app.core.csrf import csrf_is_valid, csrf_token_for_request, set_csrf_cookie
 from app.core.db import get_db
 from app.core.permissions import require_admin
 from app.modules.auth.models import User
@@ -34,7 +33,7 @@ def _render(
     submitted: dict[str, object] | None = None,
     errors: dict[str, str] | None = None,
 ) -> HTMLResponse:
-    csrf_token = secrets.token_urlsafe(32)
+    csrf_token = csrf_token_for_request(request)
     response = templates.TemplateResponse(
         request=request,
         name="defects/manage.html",
@@ -69,7 +68,6 @@ def create_defect_code_submit(
     csrf_token: Annotated[str, Form()],
     code: Annotated[str, Form()],
     name: Annotated[str, Form()],
-    defect_group: Annotated[str, Form()],
     detected_at: Annotated[str, Form()],
     actor: Annotated[User, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
@@ -79,7 +77,6 @@ def create_defect_code_submit(
     submitted = {
         "code": code,
         "name": name,
-        "defect_group": defect_group,
         "detected_at": detected_at,
     }
     try:
@@ -107,7 +104,6 @@ def update_defect_code_submit(
     csrf_token: Annotated[str, Form()],
     code: Annotated[str, Form()],
     name: Annotated[str, Form()],
-    defect_group: Annotated[str, Form()],
     detected_at: Annotated[str, Form()],
     actor: Annotated[User, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
@@ -120,7 +116,6 @@ def update_defect_code_submit(
         data = DefectCodeUpdate(
             code=code,
             name=name,
-            defect_group=defect_group,
             detected_at=detected_at,
             is_active=is_active,
             version=version,

@@ -18,17 +18,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
-PROCESS_TYPES = ("FULL", "SX_ONLY", "BAVIA_ONLY")
-
 
 class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         CheckConstraint("cycle_time_seconds > 0", name="ck_products_cycle_time_positive"),
-        CheckConstraint(
-            "default_process_type IN ('FULL', 'SX_ONLY', 'BAVIA_ONLY')",
-            name="ck_products_default_process_type",
-        ),
         Index(
             "uq_products_code_not_deleted",
             "code",
@@ -42,7 +36,6 @@ class Product(Base):
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     cycle_time_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
-    default_process_type: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     created_at: Mapped[datetime] = mapped_column(

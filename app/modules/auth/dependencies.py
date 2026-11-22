@@ -1,11 +1,13 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.modules.auth.models import LoginSession, User
 from app.modules.auth.service import next_auth_state, resolve_login_session
+from app.modules.users.models import PERMISSION_MODULES, UserPermission
 
 SESSION_COOKIE_NAME = "mes_session"
 
@@ -28,6 +30,44 @@ def require_session_context(
         session.auth_state = expected_state
 
     request.state.login_session = session
+    if session.auth_state == "active":
+        request.state.current_user = user
+        if user.role == "admin":
+            request.state.extra_permissions = frozenset()
+            request.state.navigation_access = {
+                module: {action: True for action in ("view", "create", "edit", "delete", "deliver")}
+                for module in (*PERMISSION_MODULES, "accounts")
+            }
+        else:
+            permissions = list(
+                db.scalars(
+                    select(UserPermission).where(
+                        UserPermission.user_id == user.id,
+                        UserPermission.deleted_at.is_(None),
+                    )
+                )
+            )
+            extra_permissions = frozenset(
+                (permission.module, action)
+                for permission in permissions
+                for action, allowed in (
+                    ("view", permission.can_view),
+                    ("create", permission.can_create),
+                    ("edit", permission.can_edit),
+                    ("delete", permission.can_delete),
+                )
+                if allowed
+            )
+            request.state.extra_permissions = extra_permissions
+            from app.core.permissions import has_permission
+
+            request.state.navigation_access = {
+                module: {
+                    action: has_permission(user.role, module, action, extra_permissions)
+                    for action in ("view", "create", "edit", "delete", "deliver")
+                }
+                for module in (*PERMISSION_MODULES, "accounts")
+            }
     request.state.raw_session_token = raw_token
     db.commit()
     return user, session

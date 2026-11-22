@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import AuditLog
@@ -27,7 +27,6 @@ def create_product(db: Session, data: ProductCreate, actor_id: int) -> Product:
         code=code,
         name=data.name.strip(),
         cycle_time_seconds=data.cycle_time_seconds,
-        default_process_type=data.default_process_type,
         is_active=True,
         created_by=actor_id,
         updated_by=actor_id,
@@ -73,7 +72,6 @@ def update_product(db: Session, product_id: int, data: ProductUpdate, actor_id: 
     product.code = code
     product.name = data.name.strip()
     product.cycle_time_seconds = data.cycle_time_seconds
-    product.default_process_type = data.default_process_type
     product.is_active = data.is_active
     product.version += 1
     product.updated_at = datetime.now(UTC)
@@ -90,14 +88,20 @@ def update_product(db: Session, product_id: int, data: ProductUpdate, actor_id: 
     return product
 
 
-def list_products(db: Session) -> list[Product]:
-    return list(
-        db.scalars(
-            select(Product)
-            .where(Product.deleted_at.is_(None))
-            .order_by(Product.is_active.desc(), Product.code, Product.id)
-        )
+def list_products(db: Session, *, limit: int | None = None, offset: int = 0) -> list[Product]:
+    query = (
+        select(Product)
+        .where(Product.deleted_at.is_(None))
+        .order_by(Product.is_active.desc(), Product.code, Product.id)
+        .offset(offset)
     )
+    if limit is not None:
+        query = query.limit(limit)
+    return list(db.scalars(query))
+
+
+def count_products(db: Session) -> int:
+    return db.scalar(select(func.count(Product.id)).where(Product.deleted_at.is_(None))) or 0
 
 
 def list_active_products(db: Session) -> list[Product]:
@@ -115,7 +119,6 @@ def _product_values(product: Product) -> dict[str, str | bool]:
         "code": product.code,
         "name": product.name,
         "cycle_time_seconds": _decimal_text(product.cycle_time_seconds),
-        "default_process_type": product.default_process_type,
         "is_active": product.is_active,
     }
 

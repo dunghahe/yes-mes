@@ -1,7 +1,11 @@
 .git
 .env
+.env.*
 .venv
 .uv-cache
+.uv-cache*
+node_modules
+.release-review
 __pycache__
 .pytest_cache
 .ruff_cache

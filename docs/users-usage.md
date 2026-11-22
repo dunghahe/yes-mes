@@ -1,5 +1,7 @@
 # Hướng dẫn quản trị tài khoản
 
+Vai trò và các màn hình được phép truy cập được mô tả tại [role-screen-access.md](role-screen-access.md).
+
 ## Tạo tài khoản
 
 1. Đăng nhập bằng tài khoản Admin và mở **Quản lý tài khoản**.

@@ -1,5 +1,4 @@
 import base64
-import secrets
 from io import BytesIO
 from ipaddress import ip_address
 from typing import Annotated
@@ -11,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.csrf import csrf_is_valid, set_csrf_cookie
+from app.core.csrf import csrf_is_valid, csrf_token_for_request, set_csrf_cookie
 from app.core.db import get_db
 from app.modules.auth.dependencies import (
     SESSION_COOKIE_NAME,
@@ -56,7 +55,7 @@ def _login_page(
     error: str | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
-    csrf_token = secrets.token_urlsafe(32)
+    csrf_token = csrf_token_for_request(request)
     response = templates.TemplateResponse(
         request=request,
         name="auth/login.html",
@@ -74,7 +73,7 @@ def _render_page(
     *,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
-    csrf_token = secrets.token_urlsafe(32)
+    csrf_token = csrf_token_for_request(request)
     response = templates.TemplateResponse(
         request=request,
         name=name,

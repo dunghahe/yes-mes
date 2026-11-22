@@ -1,0 +1,8 @@
+<section class="excel-import-card" aria-label="Nhập {{ import_label }} từ Excel">
+  <div><strong>Nhập {{ import_label }} từ Excel</strong><a href="/admin/imports/{{ import_resource }}/template">Tải file mẫu</a></div>
+  <form action="/admin/imports/{{ import_resource }}/preview" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input name="upload" type="file" accept=".xlsx" required aria-label="Chọn file Excel {{ import_label }}">
+    <button class="secondary-button" type="submit">Kiểm tra file</button>
+  </form>
+</section>

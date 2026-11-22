@@ -1,4 +1,3 @@
-import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request, status
@@ -8,7 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.csrf import csrf_is_valid, set_csrf_cookie
+from app.core.csrf import csrf_is_valid, csrf_token_for_request, set_csrf_cookie
 from app.core.db import get_db
 from app.core.permissions import require_admin
 from app.modules.auth.models import User
@@ -41,7 +40,7 @@ def _render(
     errors: dict[str, str] | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
-    csrf_token = secrets.token_urlsafe(32)
+    csrf_token = csrf_token_for_request(request)
     response = templates.TemplateResponse(
         request=request,
         name="employees/manage.html",

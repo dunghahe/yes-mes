@@ -33,7 +33,15 @@ cleanup() {
 trap cleanup EXIT
 chmod 600 "$local_tmp" "$offsite_tmp"
 
-docker compose exec -T db sh -ec \
+compose_args=()
+if [[ -n "${MES_COMPOSE_FILE:-}" ]]; then
+  compose_args+=(--file "$MES_COMPOSE_FILE")
+fi
+if [[ -n "${MES_ENV_FILE:-}" ]]; then
+  compose_args+=(--env-file "$MES_ENV_FILE")
+fi
+
+docker compose "${compose_args[@]}" exec -T db sh -ec \
   'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump --host=127.0.0.1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --format=custom' \
   >"$local_tmp"
 test -s "$local_tmp"

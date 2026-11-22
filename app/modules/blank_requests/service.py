@@ -5,7 +5,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased
 
-from app.modules.assets.models import Machine, MachineGroup, MachineGroupAssignment, MachinePair
+from app.modules.assets.models import Machine, MachinePair
 from app.modules.auth.models import AuditLog
 from app.modules.blank_requests.models import (
     BlankRequest,
@@ -47,13 +47,23 @@ def create_blank_request(
     if schedule is None:
         raise BlankRequestManagementError("Chọn dòng lịch đang sử dụng.")
 
-    group, operators = _validate_resources(
-        db,
-        data.machine_group_id,
-        data.machine_pair_ids,
-        data.operator_ids,
-        now,
+    order = db.scalar(
+        select(ProductionOrder)
+        .where(ProductionOrder.id == schedule.order_id, ProductionOrder.deleted_at.is_(None))
+        .with_for_update()
     )
+    if order is None:
+        raise BlankRequestManagementError("Không tìm thấy PO của lịch đã chọn.")
+    if order.process_type == "BAVIA_ONLY":
+        if data.machine_pair_ids or data.operator_ids:
+            raise BlankRequestManagementError(
+                "PO chỉ Bavia không cần khai báo máy hoặc người làm máy."
+            )
+        operators = []
+    else:
+        if not data.machine_pair_ids or not data.operator_ids:
+            raise BlankRequestManagementError("Chọn ít nhất một cặp máy và người làm.")
+        operators = _validate_resources(db, data.machine_pair_ids, data.operator_ids)
 
     counter_date = today or datetime.now(LOCAL_TZ).date()
     counter_insert = insert(BlankRequestCounter).values(
@@ -90,8 +100,7 @@ def create_blank_request(
     blank_request = BlankRequest(
         req_no=req_no,
         schedule_id=schedule.id,
-        blank_quantity=data.blank_quantity,
-        machine_group_id=group.id,
+        blank_quantity=None,
         status="submitted",
         created_at=now,
         updated_at=now,
@@ -100,10 +109,11 @@ def create_blank_request(
     )
     db.add(blank_request)
     db.flush()
-    for pair_id in data.machine_pair_ids:
+    for pair_id, employee in zip(data.machine_pair_ids, operators, strict=True):
         link = BlankRequestPair(
             blank_request_id=blank_request.id,
             machine_pair_id=pair_id,
+            employee_id=employee.id,
             created_at=now,
             updated_at=now,
             created_by=actor_id,
@@ -118,29 +128,12 @@ def create_blank_request(
             link.id,
             "create",
             None,
-            {"blank_request_id": blank_request.id, "machine_pair_id": pair_id},
-            "Chọn cặp máy cho yêu cầu phôi",
-        )
-    for employee in operators:
-        link = BlankRequestOperator(
-            blank_request_id=blank_request.id,
-            employee_id=employee.id,
-            created_at=now,
-            updated_at=now,
-            created_by=actor_id,
-            updated_by=actor_id,
-        )
-        db.add(link)
-        db.flush()
-        _audit(
-            db,
-            actor_id,
-            "blank_request_operators",
-            link.id,
-            "create",
-            None,
-            {"blank_request_id": blank_request.id, "employee_id": employee.id},
-            "Chọn người vận hành cho yêu cầu phôi",
+            {
+                "blank_request_id": blank_request.id,
+                "machine_pair_id": pair_id,
+                "employee_id": employee.id,
+            },
+            "Chọn cặp máy và người làm cho yêu cầu phôi",
         )
     _audit(
         db,
@@ -153,8 +146,6 @@ def create_blank_request(
             "req_no": req_no,
             "schedule_id": schedule.id,
             "order_id": schedule.order_id,
-            "blank_quantity": data.blank_quantity,
-            "machine_group_id": group.id,
             "machine_pair_ids": data.machine_pair_ids,
             "operator_ids": data.operator_ids,
             "status": "submitted",
@@ -190,21 +181,27 @@ def update_blank_request(
     now = datetime.now(UTC)
     current_pair_ids, current_operator_ids = request_resources(db, [request_id])[request_id]
     old_values = _request_values(blank_request, current_pair_ids, current_operator_ids)
-    group_is_unchanged = data.machine_group_id == blank_request.machine_group_id
-    group, operators = _validate_resources(
-        db,
-        data.machine_group_id,
-        data.machine_pair_ids,
-        data.operator_ids,
-        now,
-        allowed_existing_pair_ids=set(current_pair_ids) if group_is_unchanged else set(),
-        allowed_existing_operator_ids=set(current_operator_ids),
-        allow_inactive_group=group_is_unchanged,
-    )
-    _replace_pair_links(db, blank_request, data.machine_pair_ids, actor_id, now)
-    _replace_operator_links(db, blank_request, data.operator_ids, actor_id, now)
-    blank_request.blank_quantity = data.blank_quantity
-    blank_request.machine_group_id = group.id
+    schedule = db.get(ProductionSchedule, blank_request.schedule_id)
+    order = db.get(ProductionOrder, schedule.order_id) if schedule else None
+    if order is None or order.deleted_at is not None:
+        raise BlankRequestManagementError("Không tìm thấy PO của yêu cầu phôi.")
+    if order.process_type == "BAVIA_ONLY":
+        if data.machine_pair_ids or data.operator_ids:
+            raise BlankRequestManagementError(
+                "PO chỉ Bavia không cần khai báo máy hoặc người làm máy."
+            )
+        operators = []
+    else:
+        if not data.machine_pair_ids or not data.operator_ids:
+            raise BlankRequestManagementError("Chọn ít nhất một cặp máy và người làm.")
+        operators = _validate_resources(
+            db,
+            data.machine_pair_ids,
+            data.operator_ids,
+            allowed_existing_pair_ids=set(current_pair_ids),
+            allowed_existing_operator_ids=set(current_operator_ids),
+        )
+    _replace_pair_links(db, blank_request, data.machine_pair_ids, data.operator_ids, actor_id, now)
     blank_request.version += 1
     blank_request.updated_at = now
     blank_request.updated_by = actor_id
@@ -236,7 +233,7 @@ def cancel_blank_request(
     if blank_request.version != version:
         raise ConcurrentBlankRequestChange("Yêu cầu đã thay đổi. Hãy tải lại trang rồi thử lại.")
     if blank_request.status != "submitted":
-        raise BlankRequestManagementError("Chỉ hủy được yêu cầu đang chờ kho giao.")
+        raise BlankRequestManagementError("Chỉ hủy được yêu cầu đang chờ Kho NVL giao.")
     pair_ids, operator_ids = request_resources(db, [request_id])[request_id]
     old_values = _request_values(blank_request, pair_ids, operator_ids)
     now = datetime.now(UTC)
@@ -261,10 +258,24 @@ def cancel_blank_request(
 def confirm_delivery(
     db: Session,
     request_id: int,
-    actual_quantity: int,
+    actual_quantity: int | None,
     version: int,
     actor_id: int,
 ) -> tuple[BlankRequest, bool]:
+    order_id = db.scalar(
+        select(ProductionSchedule.order_id)
+        .join(BlankRequest, BlankRequest.schedule_id == ProductionSchedule.id)
+        .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
+    )
+    if order_id is None:
+        raise BlankRequestManagementError("Không tìm thấy PO của yêu cầu phôi.")
+    order = db.scalar(
+        select(ProductionOrder)
+        .where(ProductionOrder.id == order_id, ProductionOrder.deleted_at.is_(None))
+        .with_for_update()
+    )
+    if order is None:
+        raise BlankRequestManagementError("Không tìm thấy PO của yêu cầu phôi.")
     blank_request = db.scalar(
         select(BlankRequest)
         .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
@@ -275,9 +286,11 @@ def confirm_delivery(
     if blank_request.version != version:
         raise ConcurrentBlankRequestChange("Yêu cầu đã thay đổi. Hãy tải lại trang rồi thử lại.")
     if blank_request.status != "submitted":
-        raise BlankRequestManagementError("Chỉ xác nhận giao được yêu cầu đang chờ kho.")
-    if actual_quantity <= 0:
+        raise BlankRequestManagementError("Chỉ xác nhận giao được yêu cầu đang chờ Kho NVL.")
+    if actual_quantity is not None and actual_quantity <= 0:
         raise BlankRequestManagementError("Số lượng thực giao phải là số nguyên dương.")
+    if not queue_print_count(db, request_id, "production"):
+        raise BlankRequestManagementError("Cần gửi in biểu trước khi xác nhận giao phôi.")
 
     pair_ids, operator_ids = request_resources(db, [request_id])[request_id]
     old_values = _request_values(blank_request, pair_ids, operator_ids)
@@ -298,19 +311,22 @@ def confirm_delivery(
         "deliver",
         old_values,
         new_values,
-        "Kho xác nhận đã giao phôi",
+        "Kho NVL xác nhận đã giao phôi",
     )
-    return blank_request, actual_quantity != blank_request.blank_quantity
+    return blank_request, (
+        blank_request.blank_quantity is not None
+        and actual_quantity is not None
+        and actual_quantity != blank_request.blank_quantity
+    )
 
 
 def get_blank_request(db: Session, request_id: int):
     return db.execute(
-        select(BlankRequest, ProductionSchedule, ProductionOrder, Product, Shift, MachineGroup)
+        select(BlankRequest, ProductionSchedule, ProductionOrder, Product, Shift)
         .join(ProductionSchedule, ProductionSchedule.id == BlankRequest.schedule_id)
         .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
         .join(Product, Product.id == ProductionOrder.product_id)
         .join(Shift, Shift.id == ProductionSchedule.shift_id)
-        .join(MachineGroup, MachineGroup.id == BlankRequest.machine_group_id)
         .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
     ).first()
 
@@ -323,54 +339,32 @@ def can_edit_request(blank_request: BlankRequest, actor_role: str) -> bool:
 
 def _validate_resources(
     db: Session,
-    group_id: int,
     pair_ids: list[int],
     operator_ids: list[int],
-    now: datetime,
     *,
     allowed_existing_pair_ids: set[int] | None = None,
     allowed_existing_operator_ids: set[int] | None = None,
-    allow_inactive_group: bool = False,
 ):
-    group = db.scalar(
-        select(MachineGroup).where(
-            MachineGroup.id == group_id,
-            MachineGroup.deleted_at.is_(None),
-            (MachineGroup.is_active.is_(True) | allow_inactive_group),
-        )
-    )
-    if group is None:
-        raise BlankRequestManagementError("Chọn nhóm máy đang sử dụng.")
-
     machine_1 = aliased(Machine)
     machine_2 = aliased(Machine)
-    assignments = list(
+    active_pair_ids = set(
         db.scalars(
-            select(MachineGroupAssignment)
-            .join(MachinePair, MachinePair.id == MachineGroupAssignment.machine_pair_id)
+            select(MachinePair.id)
             .join(machine_1, machine_1.id == MachinePair.machine_1_id)
             .join(machine_2, machine_2.id == MachinePair.machine_2_id)
             .where(
-                MachineGroupAssignment.machine_group_id == group_id,
-                MachineGroupAssignment.valid_from <= now,
-                or_(
-                    MachineGroupAssignment.valid_to.is_(None), MachineGroupAssignment.valid_to > now
-                ),
-                MachineGroupAssignment.deleted_at.is_(None),
                 MachinePair.is_active.is_(True),
                 MachinePair.deleted_at.is_(None),
                 machine_1.is_active.is_(True),
                 machine_1.deleted_at.is_(None),
                 machine_2.is_active.is_(True),
                 machine_2.deleted_at.is_(None),
-                MachinePair.id.in_(pair_ids),
             )
         )
     )
-    assigned_pair_ids = {assignment.machine_pair_id for assignment in assignments}
-    assigned_pair_ids.update((allowed_existing_pair_ids or set()) & set(pair_ids))
-    if assigned_pair_ids != set(pair_ids):
-        raise BlankRequestManagementError("Chỉ chọn cặp máy đang thuộc nhóm máy đã chọn.")
+    active_pair_ids.update(allowed_existing_pair_ids or set())
+    if not set(pair_ids).issubset(active_pair_ids):
+        raise BlankRequestManagementError("Chỉ chọn cặp máy đang sử dụng.")
 
     operators = list(
         db.scalars(
@@ -393,11 +387,16 @@ def _validate_resources(
             operator_by_id.setdefault(employee.id, employee)
     if set(operator_by_id) != set(operator_ids):
         raise BlankRequestManagementError("Chỉ chọn nhân viên vận hành đang sử dụng.")
-    return group, [operator_by_id[employee_id] for employee_id in operator_ids]
+    return [operator_by_id[employee_id] for employee_id in operator_ids]
 
 
 def _replace_pair_links(
-    db: Session, blank_request: BlankRequest, pair_ids: list[int], actor_id: int, now: datetime
+    db: Session,
+    blank_request: BlankRequest,
+    pair_ids: list[int],
+    employee_ids: list[int],
+    actor_id: int,
+    now: datetime,
 ) -> None:
     current = list(
         db.scalars(
@@ -407,10 +406,11 @@ def _replace_pair_links(
             )
         )
     )
+    requested = dict(zip(pair_ids, employee_ids, strict=True))
     current_by_id = {link.machine_pair_id: link for link in current}
-    requested = set(pair_ids)
     for pair_id, link in current_by_id.items():
-        if pair_id in requested:
+        employee_id = requested.get(pair_id)
+        if employee_id == link.employee_id:
             continue
         link.deleted_at = now
         link.updated_at = now
@@ -421,14 +421,21 @@ def _replace_pair_links(
             "blank_request_pairs",
             link.id,
             "delete",
-            {"blank_request_id": blank_request.id, "machine_pair_id": pair_id},
+            {
+                "blank_request_id": blank_request.id,
+                "machine_pair_id": pair_id,
+                "employee_id": link.employee_id,
+            },
             {"deleted_at": now.isoformat()},
             "Gỡ cặp máy khỏi yêu cầu phôi",
         )
-    for pair_id in requested - set(current_by_id):
+    for pair_id, employee_id in requested.items():
+        if pair_id in current_by_id and current_by_id[pair_id].employee_id == employee_id:
+            continue
         link = BlankRequestPair(
             blank_request_id=blank_request.id,
             machine_pair_id=pair_id,
+            employee_id=employee_id,
             created_at=now,
             updated_at=now,
             created_by=actor_id,
@@ -443,8 +450,12 @@ def _replace_pair_links(
             link.id,
             "create",
             None,
-            {"blank_request_id": blank_request.id, "machine_pair_id": pair_id},
-            "Thêm cặp máy vào yêu cầu phôi",
+            {
+                "blank_request_id": blank_request.id,
+                "machine_pair_id": pair_id,
+                "employee_id": employee_id,
+            },
+            "Gán cặp máy và người vận hành cho yêu cầu phôi",
         )
 
 
@@ -507,7 +518,6 @@ def _request_values(
         "req_no": blank_request.req_no,
         "schedule_id": blank_request.schedule_id,
         "blank_quantity": blank_request.blank_quantity,
-        "machine_group_id": blank_request.machine_group_id,
         "machine_pair_ids": pair_ids,
         "operator_ids": operator_ids,
         "status": blank_request.status,
@@ -519,7 +529,13 @@ def _request_values(
     }
 
 
-def list_blank_requests(db: Session, *, status: str | None = None):
+def list_blank_requests(
+    db: Session,
+    *,
+    status: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+):
     query = (
         select(
             BlankRequest,
@@ -527,19 +543,26 @@ def list_blank_requests(db: Session, *, status: str | None = None):
             ProductionOrder,
             Product,
             Shift,
-            MachineGroup,
         )
         .join(ProductionSchedule, ProductionSchedule.id == BlankRequest.schedule_id)
         .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
         .join(Product, Product.id == ProductionOrder.product_id)
         .join(Shift, Shift.id == ProductionSchedule.shift_id)
-        .join(MachineGroup, MachineGroup.id == BlankRequest.machine_group_id)
         .where(BlankRequest.deleted_at.is_(None))
         .order_by(BlankRequest.created_at.desc(), BlankRequest.id.desc())
+        .offset(offset)
     )
     if status is not None:
         query = query.where(BlankRequest.status == status)
+    if limit is not None:
+        query = query.limit(limit)
     return list(db.execute(query))
+
+
+def count_blank_request_rows(db: Session) -> int:
+    return (
+        db.scalar(select(func.count(BlankRequest.id)).where(BlankRequest.deleted_at.is_(None))) or 0
+    )
 
 
 def count_blank_requests(db: Session, *, status: str) -> int:
@@ -583,12 +606,11 @@ def queue_print_stats(db: Session, request_ids: list[int]):
 
 def get_printable_request(db: Session, request_id: int):
     return db.execute(
-        select(BlankRequest, ProductionSchedule, ProductionOrder, Product, Shift, MachineGroup)
+        select(BlankRequest, ProductionSchedule, ProductionOrder, Product, Shift)
         .join(ProductionSchedule, ProductionSchedule.id == BlankRequest.schedule_id)
         .join(ProductionOrder, ProductionOrder.id == ProductionSchedule.order_id)
         .join(Product, Product.id == ProductionOrder.product_id)
         .join(Shift, Shift.id == ProductionSchedule.shift_id)
-        .join(MachineGroup, MachineGroup.id == BlankRequest.machine_group_id)
         .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
     ).first()
 
@@ -596,6 +618,12 @@ def get_printable_request(db: Session, request_id: int):
 def register_print(
     db: Session, request_id: int, form_type: str, actor_id: int
 ) -> tuple[BlankRequestPrint, object]:
+    db.scalar(
+        select(BlankRequest)
+        .where(BlankRequest.id == request_id, BlankRequest.deleted_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     row = get_printable_request(db, request_id)
     if row is None:
         raise BlankRequestManagementError("Không tìm thấy yêu cầu phôi.")
@@ -628,7 +656,9 @@ def register_print(
             "form_type": form_type,
             "printed_at": now.isoformat(),
         },
-        "Kho in lại biểu" if queue_print_count(db, request_id, form_type) > 1 else "Kho in biểu",
+        "Kho NVL in lại biểu"
+        if queue_print_count(db, request_id, form_type) > 1
+        else "Kho NVL in biểu",
     )
     return print_event, row
 
@@ -644,51 +674,41 @@ def queue_print_count(db: Session, request_id: int, form_type: str) -> int:
 
 
 def print_resource_details(db: Session, request_id: int):
-    pair_ids, operator_ids = request_resources(db, [request_id])[request_id]
+    assignments = request_pair_assignments(db, request_id)
+    pair_ids = [pair_id for pair_id, _employee_id in assignments]
+    _selected_pair_ids, operator_ids = request_resources(db, [request_id])[request_id]
     machine_1 = aliased(Machine)
     machine_2 = aliased(Machine)
-    pairs = list(
+    pair_rows = list(
         db.execute(
             select(MachinePair, machine_1, machine_2)
             .join(machine_1, machine_1.id == MachinePair.machine_1_id)
             .join(machine_2, machine_2.id == MachinePair.machine_2_id)
             .where(MachinePair.id.in_(pair_ids))
-            .order_by(MachinePair.id)
         )
     )
+    pair_by_id = {row[0].id: row for row in pair_rows}
+    pairs = [pair_by_id[pair_id] for pair_id in pair_ids if pair_id in pair_by_id]
+    employees_by_id = {
+        employee.id: employee
+        for employee in db.scalars(select(Employee).where(Employee.id.in_(operator_ids)))
+    }
+    pair_workers = [employees_by_id.get(employee_id) for _pair_id, employee_id in assignments]
     employees = list(
         db.scalars(select(Employee).where(Employee.id.in_(operator_ids)).order_by(Employee.code))
     )
-    return pairs, employees
+    return pairs, employees, pair_workers
 
 
-def active_groups(db: Session) -> list[MachineGroup]:
-    return list(
-        db.scalars(
-            select(MachineGroup)
-            .where(MachineGroup.is_active.is_(True), MachineGroup.deleted_at.is_(None))
-            .order_by(MachineGroup.code)
-        )
-    )
-
-
-def active_pairs_for_group(db: Session, group_id: int):
-    now = datetime.now(UTC)
+def active_pairs(db: Session):
     machine_1 = aliased(Machine)
     machine_2 = aliased(Machine)
     return list(
         db.execute(
             select(MachinePair, machine_1, machine_2)
-            .join(MachineGroupAssignment, MachineGroupAssignment.machine_pair_id == MachinePair.id)
             .join(machine_1, machine_1.id == MachinePair.machine_1_id)
             .join(machine_2, machine_2.id == MachinePair.machine_2_id)
             .where(
-                MachineGroupAssignment.machine_group_id == group_id,
-                MachineGroupAssignment.valid_from <= now,
-                or_(
-                    MachineGroupAssignment.valid_to.is_(None), MachineGroupAssignment.valid_to > now
-                ),
-                MachineGroupAssignment.deleted_at.is_(None),
                 MachinePair.is_active.is_(True),
                 MachinePair.deleted_at.is_(None),
                 machine_1.is_active.is_(True),
@@ -715,8 +735,8 @@ def active_operators(db: Session) -> list[Employee]:
     )
 
 
-def request_pair_options(db: Session, group_id: int, selected_pair_ids: list[int]):
-    options = {row[0].id: row for row in active_pairs_for_group(db, group_id)}
+def request_pair_options(db: Session, selected_pair_ids: list[int]):
+    options = {row[0].id: row for row in active_pairs(db)}
     if selected_pair_ids:
         machine_1 = aliased(Machine)
         machine_2 = aliased(Machine)
@@ -763,21 +783,70 @@ def request_resources(
     resources = {request_id: ([], []) for request_id in request_ids}
     if not request_ids:
         return resources
-    for request_id, pair_id in db.execute(
-        select(BlankRequestPair.blank_request_id, BlankRequestPair.machine_pair_id).where(
+    pair_workers: dict[int, list[tuple[int, int | None]]] = {key: [] for key in request_ids}
+    for request_id, pair_id, employee_id in db.execute(
+        select(
+            BlankRequestPair.blank_request_id,
+            BlankRequestPair.machine_pair_id,
+            BlankRequestPair.employee_id,
+        )
+        .where(
             BlankRequestPair.blank_request_id.in_(request_ids),
             BlankRequestPair.deleted_at.is_(None),
         )
+        .order_by(BlankRequestPair.id)
     ):
         resources[request_id][0].append(pair_id)
+        pair_workers[request_id].append((pair_id, employee_id))
+    legacy_operators: dict[int, list[int]] = {key: [] for key in request_ids}
     for request_id, employee_id in db.execute(
         select(BlankRequestOperator.blank_request_id, BlankRequestOperator.employee_id).where(
             BlankRequestOperator.blank_request_id.in_(request_ids),
             BlankRequestOperator.deleted_at.is_(None),
         )
     ):
-        resources[request_id][1].append(employee_id)
+        legacy_operators[request_id].append(employee_id)
+    for request_id in request_ids:
+        assignments = pair_workers[request_id]
+        if (
+            len(assignments) == 1
+            and assignments[0][1] is None
+            and len(legacy_operators[request_id]) == 1
+        ):
+            pair_id, _employee_id = assignments[0]
+            pair_workers[request_id][0] = (pair_id, legacy_operators[request_id][0])
+        resources[request_id][1].extend(
+            employee_id for _pair_id, employee_id in pair_workers[request_id] if employee_id
+        )
+        if not any(employee_id for _pair_id, employee_id in pair_workers[request_id]):
+            resources[request_id][1].extend(legacy_operators[request_id])
     return resources
+
+
+def request_pair_assignments(db: Session, request_id: int) -> list[tuple[int, int | None]]:
+    rows = list(
+        db.execute(
+            select(BlankRequestPair.machine_pair_id, BlankRequestPair.employee_id)
+            .where(
+                BlankRequestPair.blank_request_id == request_id,
+                BlankRequestPair.deleted_at.is_(None),
+            )
+            .order_by(BlankRequestPair.id)
+        )
+    )
+    if len(rows) != 1 or rows[0][1] is not None:
+        return rows
+    legacy_employee_ids = list(
+        db.scalars(
+            select(BlankRequestOperator.employee_id).where(
+                BlankRequestOperator.blank_request_id == request_id,
+                BlankRequestOperator.deleted_at.is_(None),
+            )
+        )
+    )
+    if len(legacy_employee_ids) == 1:
+        return [(rows[0][0], legacy_employee_ids[0])]
+    return rows
 
 
 def _audit(

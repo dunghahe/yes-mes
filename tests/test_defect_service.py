@@ -36,7 +36,6 @@ def _data(code: str, detected_at: str = "SX") -> DefectCodeCreate:
     return DefectCodeCreate(
         code=code,
         name="Lỗi thử nghiệm",
-        defect_group="Ngoại quan",
         detected_at=detected_at,
     )
 
@@ -56,7 +55,8 @@ def test_create_defect_code_audits_without_machine_binding() -> None:
         assert item.detected_at == "SX"
         assert "machine_id" not in item.__table__.columns
         assert audit.actor_id == actor.id
-        assert audit.new_values["defect_group"] == "Ngoại quan"
+        assert item.defect_group == ""
+        assert audit.new_values["defect_group"] == ""
     finally:
         db.rollback()
         db.close()
@@ -71,6 +71,32 @@ def test_defect_code_is_unique() -> None:
         create_defect_code(db, _data(code), actor.id)
         with pytest.raises(DefectCodeError, match="đã được sử dụng"):
             create_defect_code(db, _data(code), actor.id)
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_edit_without_group_preserves_legacy_group() -> None:
+    db = SessionLocal()
+    try:
+        db.begin()
+        actor = _admin(db)
+        data = _data(f"NG-{uuid4().hex}").model_copy(update={"defect_group": "Ngoại quan"})
+        item = create_defect_code(db, data, actor.id)
+        update_defect_code(
+            db,
+            item.id,
+            DefectCodeUpdate(
+                code=item.code,
+                name="Tên lỗi đã sửa",
+                detected_at="SX",
+                is_active=True,
+                version=item.version,
+            ),
+            actor.id,
+        )
+        assert item.name == "Tên lỗi đã sửa"
+        assert item.defect_group == "Ngoại quan"
     finally:
         db.rollback()
         db.close()

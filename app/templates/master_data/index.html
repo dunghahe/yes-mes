@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="data-panel" aria-labelledby="page-title">
+    <p class="eyebrow">Tra cứu</p>
+    <h1 id="page-title">Danh mục dùng chung</h1>
+
+    <section class="subsection"><h2>Mã hàng</h2><div class="table-wrap"><table>
+      <thead><tr><th>Mã</th><th>Tên</th><th>Chu kỳ (giây/con)</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for item in products %}<tr><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.cycle_time_seconds }}</td><td>{{ 'Đang dùng' if item.is_active else 'Ngừng dùng' }}</td></tr>{% else %}<tr><td colspan="4">Chưa có dữ liệu.</td></tr>{% endfor %}
+      </tbody></table></div></section>
+
+    <section class="subsection"><h2>Máy và cặp máy</h2><div class="table-wrap"><table>
+      <thead><tr><th>Máy</th><th>Khu sản xuất</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for item in machines %}<tr><td>{{ item.code }} · {{ item.name }}</td><td>{{ item.production_area }}</td><td>{{ 'Đang dùng' if item.is_active else 'Ngừng dùng' }}</td></tr>{% else %}<tr><td colspan="3">Chưa có dữ liệu.</td></tr>{% endfor %}
+      </tbody></table></div><div class="table-wrap"><table>
+      <thead><tr><th>Cặp máy</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for pair, machine_1, machine_2 in machine_pairs %}<tr><td>{{ machine_1.code }} – {{ machine_2.code }}</td><td>{{ 'Đang dùng' if pair.is_active else 'Ngừng dùng' }}</td></tr>{% else %}<tr><td colspan="2">Chưa có cặp máy.</td></tr>{% endfor %}
+      </tbody></table></div></section>
+
+    <section class="subsection"><h2>Nhân viên</h2><div class="table-wrap"><table>
+      <thead><tr><th>Mã</th><th>Họ tên</th><th>Loại</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for item in employees %}<tr><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.employee_type }}</td><td>{{ 'Đang làm' if item.is_active else 'Ngừng làm' }}</td></tr>{% else %}<tr><td colspan="4">Chưa có dữ liệu.</td></tr>{% endfor %}
+      </tbody></table></div></section>
+
+    <section class="subsection"><h2>Mã lỗi</h2><div class="table-wrap"><table>
+      <thead><tr><th>Mã</th><th>Tên lỗi</th><th>Công đoạn</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for item in defect_codes %}<tr><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.detected_at }}</td><td>{{ 'Đang dùng' if item.is_active else 'Ngừng dùng' }}</td></tr>{% else %}<tr><td colspan="4">Chưa có dữ liệu.</td></tr>{% endfor %}
+      </tbody></table></div></section>
+
+    <section class="subsection"><h2>Ca/kíp</h2><div class="table-wrap"><table>
+      <thead><tr><th>Tên kíp</th><th>Giờ</th><th>Nghỉ (phút)</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for item in shifts %}<tr><td>{{ item.name }}</td><td>{{ item.start_time.strftime('%H:%M') }}–{{ item.end_time.strftime('%H:%M') }}</td><td>{{ item.planned_break_minutes }}</td><td>{{ 'Đang dùng' if item.is_active else 'Ngừng dùng' }}</td></tr>{% else %}<tr><td colspan="4">Chưa có dữ liệu.</td></tr>{% endfor %}
+      </tbody></table></div></section>
+
+    <section class="subsection"><h2>Lý do dừng máy</h2><div class="table-wrap"><table>
+      <thead><tr><th>Mã</th><th>Lý do</th><th>Trạng thái</th></tr></thead><tbody>
+        {% for item in downtime_reasons %}<tr><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ 'Đang dùng' if item.is_active else 'Ngừng dùng' }}</td></tr>{% else %}<tr><td colspan="3">Chưa có dữ liệu.</td></tr>{% endfor %}
+      </tbody></table></div></section>
+  </section>
+{% endblock %}
