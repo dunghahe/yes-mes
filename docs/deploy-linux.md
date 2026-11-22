@@ -8,7 +8,7 @@ Giao diện Jinja và backend chạy trong cùng image; PostgreSQL chạy trong 
 2. Tạo `.env.production` từ `.env.production.example`, đặt quyền `chmod 600 .env.production`.
 3. Điền ba mật khẩu riêng cho bootstrap/runtime/migration; URL kết nối phải tương ứng. Nếu mật khẩu chứa ký tự đặc biệt, URL-encode phần mật khẩu trong URL.
 4. Khi khôi phục dữ liệu cũ, **giữ đúng TOTP_ENCRYPTION_KEYS cũ**. Mật khẩu database có thể đổi theo máy mới; khóa mã hóa TOTP không được tự sinh thay thế.
-5. Điền team domain và audience thực của ứng dụng Cloudflare Access. Cấu hình này bắt buộc; giá trị trong tệp mẫu chỉ để minh họa.
+5. Nếu muốn Cloudflare Access yêu cầu đăng nhập trước MES, đặt `CLOUDFLARE_ACCESS_REQUIRED=true` và điền team domain/audience. Mặc định mẫu hiện tại đặt `false`: hostname công khai đi thẳng tới đăng nhập MES; vẫn giữ mật khẩu, giới hạn đăng nhập sai và TOTP Admin.
 
 Các lệnh dưới chạy tại thư mục dự án trên Linux:
 
@@ -59,7 +59,7 @@ docker compose --env-file .env.production -f compose.production.yaml exec -T app
 
 Nếu `cloudflared` chạy trực tiếp trên cùng Linux host, trỏ tunnel vào `http://127.0.0.1:8000`. Nếu chạy cloudflared trong container riêng, cấu hình mạng riêng phù hợp; `127.0.0.1` trong container đó không phải host. Không mở cổng PostgreSQL ra ngoài.
 
-App kiểm chữ ký, hạn và audience của JWT Access. Truy cập HTTP trực tiếp thiếu JWT trả 403 là đúng; healthcheck trong container kiểm tra tiến trình web và kết nối DB mà không nới bảo vệ HTTP. Asset dùng URL tương đối để tránh mixed content khi Tunnel kết thúc HTTPS ở phía ngoài.
+Khi `CLOUDFLARE_ACCESS_REQUIRED=true`, app kiểm chữ ký, hạn và audience của JWT Access; thiếu JWT trả 403. Khi đặt `false`, Access không còn là lớp đăng nhập phía trước và ứng dụng dựa vào tài khoản MES, giới hạn đăng nhập sai và TOTP Admin. Chỉ dùng sau khi chủ ý công khai trang đăng nhập MES qua Tunnel. Healthcheck trong container kiểm tra tiến trình web và kết nối DB. Asset dùng URL tương đối để tránh mixed content khi Tunnel kết thúc HTTPS ở phía ngoài.
 
 Nghiệm thu trên hostname thật:
 

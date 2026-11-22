@@ -50,10 +50,18 @@ from app.modules.shifts.router import router as shifts_router
 from app.modules.users.router import router as users_router
 
 settings = get_settings()
-access_team_domain = validate_access_configuration(
-    settings.cloudflare_access_team_domain, settings.cloudflare_access_audience
+access_team_domain = (
+    validate_access_configuration(
+        settings.cloudflare_access_team_domain, settings.cloudflare_access_audience
+    )
+    if settings.cloudflare_access_required
+    else None
 )
-if settings.app_env == "production" and access_team_domain is None:
+if (
+    settings.app_env == "production"
+    and settings.cloudflare_access_required
+    and access_team_domain is None
+):
     raise RuntimeError("Cloudflare Access team domain và audience phải được cấu hình ở production.")
 docs_url = "/docs" if settings.app_env == "development" else None
 
@@ -93,7 +101,7 @@ app.include_router(warehouse_blank_requests_router)
 @app.middleware("http")
 async def security_headers_and_sliding_cookie(request: Request, call_next):
     response = None
-    if access_team_domain is not None:
+    if settings.cloudflare_access_required and access_team_domain is not None:
         token = request.headers.get("Cf-Access-Jwt-Assertion", "")
         try:
             import anyio

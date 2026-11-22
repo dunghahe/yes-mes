@@ -161,3 +161,8 @@
 - Giao diện toàn ứng dụng ưu tiên sử dụng trên PC; màn tạo yêu cầu xuất phôi cần dùng thuận tiện trên điện thoại.
 - Màn nhập sản lượng bỏ tiêu đề Ca/kíp lặp; phân nhóm cặp máy bằng nền xanh nhạt. Chỉ dùng màu vàng nhạt khi biểu có ghi nhận dừng máy; màu sắc dùng để phân biệt nội dung và trạng thái, không trang trí dày đặc.
 
+## 2026-11-23 · Đăng nhập MES qua hostname công khai
+
+- Người dùng vào hostname MES công khai qua Cloudflare Tunnel và đăng nhập trực tiếp bằng tài khoản MES; không yêu cầu xác thực Cloudflare Access trước đó. `CLOUDFLARE_ACCESS_REQUIRED=false`.
+- Giữ xác thực nội bộ MES, giới hạn đăng nhập sai và TOTP bắt buộc cho Admin. Đây là lựa chọn giảm một lớp chặn ngoài; trang đăng nhập MES có thể được mọi người trên Internet truy cập.
+
